@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: build windows_amd64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache: false
+
+      - name: Resolve version
+        shell: pwsh
+        run: |
+          $version = "0.0.0-dev"
+          if ($env:GITHUB_REF_TYPE -eq "tag" -and $env:GITHUB_REF_NAME -match "^v(.+)$") {
+            $version = $Matches[1]
+          }
+          Add-Content -Path $env:GITHUB_ENV -Value "VERSION=$version" -Encoding utf8
+
+      - name: Build web
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Embed web assets
+        shell: pwsh
+        run: |
+          $dst = "server/internal/api/out"
+          if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }
+          New-Item -ItemType Directory -Path $dst -Force | Out-Null
+          Copy-Item -Path "web/out/*" -Destination $dst -Recurse -Force
+
+      - name: Vet and test
+        working-directory: server
+        run: |
+          go vet ./...
+          go test ./...
+
+      - name: Build
+        shell: pwsh
+        working-directory: server
+        env:
+          CGO_ENABLED: "0"
+          GOOS: windows
+          GOARCH: amd64
+        run: |
+          New-Item -ItemType Directory -Path "../dist/windows_amd64" -Force | Out-Null
+          go build -trimpath -ldflags "-s -w -X main.version=$env:VERSION" -o "../dist/windows_amd64/dissect.exe" .
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $pkg = "dist/release/dissect"
+          Remove-Item -Recurse -Force "dist/release" -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path "$pkg/vendor/unrpyc" -Force | Out-Null
+          Copy-Item "dist/windows_amd64/dissect.exe" "$pkg/dissect.exe"
+          Copy-Item -Path "vendor/unrpyc/*" -Destination "$pkg/vendor/unrpyc" -Recurse -Force
+          Copy-Item "vendor/unitypy_worker.py" "$pkg/vendor/unitypy_worker.py"
+
+          $text = & "$pkg/dissect.exe" version
+          if ($LASTEXITCODE -ne 0) { throw "dissect.exe exited with $LASTEXITCODE" }
+          if ($text -notmatch [regex]::Escape("v$env:VERSION")) { throw "unexpected version output: $text" }
+
+          $zip = "dist/dissect_$($env:VERSION)_windows_amd64.zip"
+          Compress-Archive -Path $pkg -DestinationPath $zip -Force
+          Get-Item $zip | Select-Object FullName, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dissect-windows-amd64
+          path: dist/dissect_*_windows_amd64.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dissect-windows-amd64
+          path: dist
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/*.zip --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/releases" \
+              -f tag_name="$TAG" -f name="$TAG" -f body=""
+            gh release upload "$TAG" dist/*.zip --repo "$GITHUB_REPOSITORY"
+          fi

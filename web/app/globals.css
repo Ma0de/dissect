@@ -1,0 +1,429 @@
+@import "tailwindcss";
+
+/* Untitled UI v8 同款 class 暗色变体：.dark-mode 挂在 <html> 上 */
+@custom-variant dark (&:where(.dark-mode, .dark-mode *));
+
+/* ===== Inter 变量字体（与 untitledui.com 完全一致的子集文件与 unicode-range） ===== */
+@font-face { font-family: Inter; font-style: normal; font-weight: 100 900; font-display: swap; src: url(/fonts/46a9e2f250689b4a-s.03ez25a9g3i0n.woff2) format("woff2"); unicode-range: U+460-52F,U+1C80-1C8A,U+20B4,U+2DE0-2DFF,U+A640-A69F,U+FE2E-FE2F; }
+@font-face { font-family: Inter; font-style: normal; font-weight: 100 900; font-display: swap; src: url(/fonts/76b70a1dbe058eb5-s.3i9rha7jpxn0q.woff2) format("woff2"); unicode-range: U+301,U+400-45F,U+490-491,U+4B0-4B1,U+2116; }
+@font-face { font-family: Inter; font-style: normal; font-weight: 100 900; font-display: swap; src: url(/fonts/2fb76073e23fd9e4-s.2o7ko1d-5m1xu.woff2) format("woff2"); unicode-range: U+1F??; }
+@font-face { font-family: Inter; font-style: normal; font-weight: 100 900; font-display: swap; src: url(/fonts/6131cbbf5549afa2-s.1ee5w62fj497l.woff2) format("woff2"); unicode-range: U+370-377,U+37A-37F,U+384-38A,U+38C,U+38E-3A1,U+3A3-3FF; }
+@font-face { font-family: Inter; font-style: normal; font-weight: 100 900; font-display: swap; src: url(/fonts/45462fd7b7c12654-s.1way2z9fj6cig.woff2) format("woff2"); unicode-range: U+102-103,U+110-111,U+128-129,U+168-169,U+1A0-1A1,U+1AF-1B0,U+300-301,U+303-304,U+308-309,U+323,U+329,U+1EA0-1EF9,U+20AB; }
+@font-face { font-family: Inter; font-style: normal; font-weight: 100 900; font-display: swap; src: url(/fonts/ba63f6a0e436df8e-s.0szrwpqb9mkwe.woff2) format("woff2"); unicode-range: U+100-2BA,U+2BD-2C5,U+2C7-2CC,U+2CE-2D7,U+2DD-2FF,U+304,U+308,U+329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: Inter; font-style: normal; font-weight: 100 900; font-display: swap; src: url(/fonts/07c7676b89ed2778-s.p.45535valc9rzk.woff2) format("woff2"); unicode-range: U+??,U+131,U+152-153,U+2BB-2BC,U+2C6,U+2DA,U+2DC,U+304,U+308,U+329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+
+/* ===== 语义令牌 —— 逆向自 untitledui.com v8（:root 亮色 / .dark-mode 暗色） ===== */
+:root {
+  color-scheme: light;
+
+  /* 表面 */
+  --bg-primary: #ffffff;            /* neutral-0 */
+  --bg-primary-hover: #fafafa;      /* neutral-50 */
+  --bg-secondary: #fafafa;
+  --bg-secondary-hover: #f5f5f5;
+  --bg-tertiary: #f5f5f5;
+  --bg-active: #fafafa;
+  --bg-quaternary: #e5e5e5;
+  --bg-overlay: #0a0a0a;
+  --bg-primary-solid: #0a0a0a;
+  --bg-primary-alt: #ffffff;
+  --bg-secondary-alt: #fafafa;
+  --alpha-white: #ffffff;
+  --alpha-black: #000000;
+
+  /* 边框 */
+  --border-primary: #d4d4d4;
+  --border-secondary: #e5e5e5;
+  --border-tertiary: #f5f5f5;
+  --border-secondary-alt: #0000001a;
+  --toggle-border: #d4d4d4;
+
+  /* 前景 / 文本 */
+  --fg-primary: #171717;
+  --fg-secondary: #404040;
+  --fg-secondary-hover: #262626;
+  --fg-tertiary: #525252;
+  --fg-tertiary-hover: #404040;
+  --fg-quaternary: #a1a1a1;
+  --fg-quaternary-hover: #737373;
+  --fg-white: #ffffff;
+  --fg-brand-primary: #7f56d9;
+  --fg-brand-primary-alt: #7f56d9;
+  --fg-brand-secondary: #9e77ed;
+  --fg-error-primary: #e40014;
+  --fg-error-secondary: #fb2c36;
+  --fg-success-primary: #00a544;
+
+  --text-primary: #171717;
+  --text-secondary: #404040;
+  --text-secondary-hover: #262626;
+  --text-tertiary: #525252;
+  --text-tertiary-hover: #404040;
+  --text-quaternary: #737373;
+  --text-placeholder: #737373;
+  --text-white: #ffffff;
+  --text-brand-primary: #42307d;
+  --text-brand-secondary: #6941c6;
+  --text-brand-tertiary: #7f56d9;
+  --text-error-primary: #e40014;
+  --text-success-primary: #00a544;
+
+  /* 实色按钮 / 强调 */
+  --bg-brand-solid: #7f56d9;
+  --bg-brand-solid-hover: #6941c6;
+  --bg-brand-primary: #f9f5ff;
+  --bg-brand-secondary: #f4ebff;
+  --bg-error-solid: #e40014;
+  --bg-error-solid-hover: #bf000f;
+  --bg-error-primary: #fef2f2;
+  --bg-error-secondary: #ffe2e2;
+  --bg-success-primary: #f0fdf4;
+  --bg-success-secondary: #dcfce7;
+  --bg-warning-primary: #fefce8;
+  --bg-warning-secondary: #fef9c2;
+
+  --focus-ring: #9e77ed;
+
+  /* utility-* 映射（亮色 = 原色阶） */
+  --utility-brand-50: #f9f5ff;  --utility-brand-100: #f4ebff;  --utility-brand-200: #e9d7fe;
+  --utility-brand-500: #9e77ed; --utility-brand-700: #6941c6;
+  --utility-green-50: #f0fdf4;  --utility-green-100: #dcfce7;  --utility-green-200: #b9f8cf;
+  --utility-green-500: #00c758; --utility-green-700: #008138;
+  --utility-red-50: #fef2f2;    --utility-red-100: #ffe2e2;    --utility-red-200: #ffcaca;
+  --utility-red-500: #fb2c36;   --utility-red-700: #bf000f;
+  --utility-yellow-50: #fefce8; --utility-yellow-100: #fef9c2; --utility-yellow-200: #fff085;
+  --utility-yellow-500: #edb200;--utility-yellow-700: #a36100;
+  --utility-blue-50: #eff6ff;   --utility-blue-100: #dbeafe;   --utility-blue-200: #bedbff;
+  --utility-blue-500: #3080ff;  --utility-blue-700: #1447e6;
+  --utility-neutral-50: #fafafa; --utility-neutral-100: #f5f5f5; --utility-neutral-200: #e5e5e5;
+  --utility-neutral-300: #d4d4d4; --utility-neutral-400: #a1a1a1;
+  --utility-neutral-500: #737373; --utility-neutral-700: #404040;
+}
+
+.dark-mode {
+  color-scheme: dark;
+
+  --bg-primary: #0a0a0a;
+  --bg-primary-hover: #171717;
+  --bg-secondary: #171717;
+  --bg-secondary-hover: #262626;
+  --bg-tertiary: #262626;
+  --bg-active: #262626;
+  --bg-quaternary: #404040;
+  --bg-overlay: #262626;
+  --bg-primary-solid: #171717;
+  --bg-primary-alt: #171717;
+  --bg-secondary-alt: #0a0a0a;
+  --alpha-white: #0c0e12;
+  --alpha-black: #ffffff;
+
+  --border-primary: #404040;
+  --border-secondary: #262626;
+  --border-tertiary: #262626;
+  --border-secondary-alt: #262626;
+  --toggle-border: transparent;
+
+  --fg-primary: #ffffff;
+  --fg-secondary: #d4d4d4;
+  --fg-secondary-hover: #e5e5e5;
+  --fg-tertiary: #a1a1a1;
+  --fg-tertiary-hover: #d4d4d4;
+  --fg-quaternary: #525252;
+  --fg-quaternary-hover: #737373;
+  --fg-white: #ffffff;
+  --fg-brand-primary: #9e77ed;
+  --fg-brand-primary-alt: #d4d4d4;
+  --fg-brand-secondary: #9e77ed;
+  --fg-error-primary: #fb2c36;
+  --fg-error-secondary: #ff6568;
+  --fg-success-primary: #05df72;
+
+  --text-primary: #fafafa;
+  --text-secondary: #d4d4d4;
+  --text-secondary-hover: #e5e5e5;
+  --text-tertiary: #a1a1a1;
+  --text-tertiary-hover: #d4d4d4;
+  --text-quaternary: #a1a1a1;
+  --text-placeholder: #737373;
+  --text-white: #ffffff;
+  --text-brand-primary: #fafafa;
+  --text-brand-secondary: #d4d4d4;
+  --text-brand-tertiary: #a1a1a1;
+  --text-error-primary: #ff6568;
+  --text-success-primary: #05df72;
+
+  --bg-brand-solid: #7f56d9;
+  --bg-brand-solid-hover: #9e77ed;
+  --bg-brand-primary: #9e77ed;
+  --bg-brand-secondary: #7f56d9;
+  --bg-error-solid: #e40014;
+  --bg-error-solid-hover: #fb2c36;
+  --bg-error-primary: #460809;
+  --bg-error-secondary: #e40014;
+  --bg-success-primary: #032e15;
+  --bg-success-secondary: #00a544;
+  --bg-warning-primary: #432004;
+  --bg-warning-secondary: #cd8900;
+
+  --focus-ring: #9e77ed;
+
+  /* utility-* 映射（暗色翻转，与他们的 --color-utility-* 双值一致） */
+  --utility-brand-50: #2c1c5f;  --utility-brand-100: #42307d;  --utility-brand-200: #53389e;
+  --utility-brand-500: #9e77ed; --utility-brand-700: #d6bbfb;
+  --utility-green-50: #032e15;  --utility-green-100: #0d542b;  --utility-green-200: #016630;
+  --utility-green-500: #00c758; --utility-green-700: #7bf1a8;
+  --utility-red-50: #460809;    --utility-red-100: #82181a;    --utility-red-200: #9f0712;
+  --utility-red-500: #fb2c36;   --utility-red-700: #ffa3a3;
+  --utility-yellow-50: #432004; --utility-yellow-100: #733e0a; --utility-yellow-200: #874b00;
+  --utility-yellow-500: #edb200;--utility-yellow-700: #ffe02a;
+  --utility-blue-50: #162456;   --utility-blue-100: #1c398e;   --utility-blue-200: #193cb8;
+  --utility-blue-500: #3080ff;  --utility-blue-700: #90c5ff;
+  --utility-neutral-50: #171717; --utility-neutral-100: #262626; --utility-neutral-200: #404040;
+  --utility-neutral-300: #404040; --utility-neutral-400: #525252;
+  --utility-neutral-500: #737373; --utility-neutral-700: #d4d4d4;
+}
+@theme inline {
+  /* ===== Tailwind v4 主题：调色板 + 命名空间别名（与他们的编译产物同名同值） ===== */
+  /* 中性色板（v8 = 纯中性黑系，不再是 v7 蓝灰系） */
+  --color-neutral-50: #fafafa;
+  --color-neutral-100: #f5f5f5;
+  --color-neutral-200: #e5e5e5;
+  --color-neutral-300: #d4d4d4;
+  --color-neutral-400: #a1a1a1;
+  --color-neutral-500: #737373;
+  --color-neutral-600: #525252;
+  --color-neutral-700: #404040;
+  --color-neutral-800: #262626;
+  --color-neutral-900: #171717;
+  --color-neutral-950: #0a0a0a;
+
+  /* 品牌紫 */
+  --color-brand-50: #f9f5ff;
+  --color-brand-100: #f4ebff;
+  --color-brand-200: #e9d7fe;
+  --color-brand-300: #d6bbfb;
+  --color-brand-400: #b692f6;
+  --color-brand-500: #9e77ed;
+  --color-brand-600: #7f56d9;
+  --color-brand-700: #6941c6;
+  --color-brand-800: #53389e;
+  --color-brand-900: #42307d;
+  --color-brand-950: #2c1c5f;
+
+  /* 功能色（徽章 / 状态用 utility 映射） */
+  --color-green-50: #f0fdf4;  --color-green-100: #dcfce7;  --color-green-200: #b9f8cf;
+  --color-green-300: #7bf1a8; --color-green-400: #05df72;  --color-green-500: #00c758;
+  --color-green-600: #00a544; --color-green-700: #008138;  --color-green-800: #016630;
+  --color-green-900: #0d542b; --color-green-950: #032e15;
+
+  --color-red-50: #fef2f2;  --color-red-100: #ffe2e2;  --color-red-200: #ffcaca;
+  --color-red-300: #ffa3a3; --color-red-400: #ff6568;  --color-red-500: #fb2c36;
+  --color-red-600: #e40014; --color-red-700: #bf000f;  --color-red-800: #9f0712;
+  --color-red-900: #82181a; --color-red-950: #460809;
+
+  --color-yellow-50: #fefce8;  --color-yellow-100: #fef9c2;  --color-yellow-200: #fff085;
+  --color-yellow-300: #ffe02a; --color-yellow-400: #fac800;  --color-yellow-500: #edb200;
+  --color-yellow-600: #cd8900; --color-yellow-700: #a36100;  --color-yellow-800: #874b00;
+  --color-yellow-900: #733e0a; --color-yellow-950: #432004;
+
+  --color-blue-50: #eff6ff;  --color-blue-100: #dbeafe;  --color-blue-200: #bedbff;
+  --color-blue-300: #90c5ff; --color-blue-400: #54a2ff;  --color-blue-500: #3080ff;
+  --color-blue-600: #155dfc; --color-blue-700: #1447e6;  --color-blue-800: #193cb8;
+  --color-blue-900: #1c398e; --color-blue-950: #162456;
+
+  --color-white: #fff;
+  --color-black: #000;
+  --color-transparent: transparent;
+  --color-alpha-white: var(--alpha-white);
+  --color-alpha-black: var(--alpha-black);
+  --color-toggle-border: var(--toggle-border);
+  --color-focus-ring: var(--focus-ring);
+
+  /* utility-*（亮暗自动翻转，供徽章/状态色使用） */
+  --color-utility-neutral-50: var(--utility-neutral-50);
+  --color-utility-neutral-100: var(--utility-neutral-100);
+  --color-utility-neutral-200: var(--utility-neutral-200);
+  --color-utility-neutral-300: var(--utility-neutral-300);
+  --color-utility-neutral-400: var(--utility-neutral-400);
+  --color-utility-neutral-500: var(--utility-neutral-500);
+  --color-utility-neutral-700: var(--utility-neutral-700);
+
+  --color-utility-brand-50: var(--utility-brand-50);
+  --color-utility-brand-100: var(--utility-brand-100);
+  --color-utility-brand-200: var(--utility-brand-200);
+  --color-utility-brand-500: var(--utility-brand-500);
+  --color-utility-brand-700: var(--utility-brand-700);
+
+  --color-utility-green-50: var(--utility-green-50);
+  --color-utility-green-100: var(--utility-green-100);
+  --color-utility-green-200: var(--utility-green-200);
+  --color-utility-green-500: var(--utility-green-500);
+  --color-utility-green-700: var(--utility-green-700);
+
+  --color-utility-red-50: var(--utility-red-50);
+  --color-utility-red-100: var(--utility-red-100);
+  --color-utility-red-200: var(--utility-red-200);
+  --color-utility-red-500: var(--utility-red-500);
+  --color-utility-red-700: var(--utility-red-700);
+
+  --color-utility-yellow-50: var(--utility-yellow-50);
+  --color-utility-yellow-100: var(--utility-yellow-100);
+  --color-utility-yellow-200: var(--utility-yellow-200);
+  --color-utility-yellow-500: var(--utility-yellow-500);
+  --color-utility-yellow-700: var(--utility-yellow-700);
+
+  --color-utility-blue-50: var(--utility-blue-50);
+  --color-utility-blue-100: var(--utility-blue-100);
+  --color-utility-blue-200: var(--utility-blue-200);
+  --color-utility-blue-500: var(--utility-blue-500);
+  --color-utility-blue-700: var(--utility-blue-700);
+
+  /* —— 背景（bg-* 工具类） —— */
+  --background-color-primary: var(--bg-primary);
+  --background-color-primary_hover: var(--bg-primary-hover);
+  --background-color-primary-solid: var(--bg-primary-solid);
+  --background-color-primary_alt: var(--bg-primary-alt);
+  --background-color-secondary: var(--bg-secondary);
+  --background-color-secondary_hover: var(--bg-secondary-hover);
+  --background-color-secondary_alt: var(--bg-secondary-alt);
+  --background-color-tertiary: var(--bg-tertiary);
+  --background-color-active: var(--bg-active);
+  --background-color-quaternary: var(--bg-quaternary);
+  --background-color-overlay: var(--bg-overlay);
+  --background-color-brand-solid: var(--bg-brand-solid);
+  --background-color-brand-solid_hover: var(--bg-brand-solid-hover);
+  --background-color-brand-primary: var(--bg-brand-primary);
+  --background-color-brand-secondary: var(--bg-brand-secondary);
+  --background-color-error-solid: var(--bg-error-solid);
+  --background-color-error-solid_hover: var(--bg-error-solid-hover);
+  --background-color-error-primary: var(--bg-error-primary);
+  --background-color-error-secondary: var(--bg-error-secondary);
+  --background-color-success-primary: var(--bg-success-primary);
+  --background-color-success-secondary: var(--bg-success-secondary);
+  --background-color-warning-primary: var(--bg-warning-primary);
+  --background-color-warning-secondary: var(--bg-warning-secondary);
+  --background-color-fg-white: var(--fg-white);
+  --background-color-fg-brand-primary: var(--fg-brand-primary);
+  --background-color-fg-quaternary: var(--fg-quaternary);
+
+  /* —— 文本（text-* 颜色工具类） —— */
+  --text-color-primary: var(--text-primary);
+  --text-color-secondary: var(--text-secondary);
+  --text-color-secondary_hover: var(--text-secondary-hover);
+  --text-color-tertiary: var(--text-tertiary);
+  --text-color-tertiary_hover: var(--text-tertiary-hover);
+  --text-color-quaternary: var(--text-quaternary);
+  --text-color-placeholder: var(--text-placeholder);
+  --text-color-white: var(--text-white);
+  --text-color-brand-primary: var(--text-brand-primary);
+  --text-color-brand-secondary: var(--text-brand-secondary);
+  --text-color-brand-tertiary: var(--text-brand-tertiary);
+  --text-color-error-primary: var(--text-error-primary);
+  --text-color-success-primary: var(--text-success-primary);
+  --text-color-fg-primary: var(--fg-primary);
+  --text-color-fg-secondary: var(--fg-secondary);
+  --text-color-fg-secondary_hover: var(--fg-secondary-hover);
+  --text-color-fg-tertiary: var(--fg-tertiary);
+  --text-color-fg-tertiary_hover: var(--fg-tertiary-hover);
+  --text-color-fg-quaternary: var(--fg-quaternary);
+  --text-color-fg-quaternary_hover: var(--fg-quaternary-hover);
+  --text-color-fg-white: var(--fg-white);
+  --text-color-fg-brand-primary: var(--fg-brand-primary);
+  --text-color-fg-brand-secondary: var(--fg-brand-secondary);
+  --text-color-fg-error-primary: var(--fg-error-primary);
+  --text-color-fg-error-secondary: var(--fg-error-secondary);
+  --text-color-fg-success-primary: var(--fg-success-primary);
+
+  /* —— 边框（border-* 工具类） —— */
+  --border-color-primary: var(--border-primary);
+  --border-color-secondary: var(--border-secondary);
+  --border-color-tertiary: var(--border-tertiary);
+  --border-color-secondary_alt: var(--border-secondary-alt);
+  --border-color-brand: var(--color-brand-500);
+  --border-color-error: var(--color-red-500);
+  --border-color-toggle-border: var(--toggle-border);
+  --border-color-transparent: transparent;
+
+  /* —— ring（ring-* 工具类） —— */
+  --ring-color-primary: var(--border-primary);
+  --ring-color-secondary: var(--border-secondary);
+  --ring-color-tertiary: var(--border-tertiary);
+  --ring-color-secondary_alt: var(--border-secondary-alt);
+  --ring-color-brand: var(--color-brand-500);
+  --ring-color-error: var(--color-red-500);
+  --ring-color-toggle-border: var(--toggle-border);
+  --ring-color-transparent: transparent;
+
+  /* —— 阴影（与他们的编译值逐字一致） —— */
+  --shadow-xs: 0px 1px 2px #0000000d;
+  --shadow-sm: 0px 1px 3px #0000001a, 0px 1px 2px -1px #0000001a;
+  --shadow-md: 0px 4px 6px -1px #0000001a, 0px 2px 4px -2px #0000000f;
+  --shadow-lg: 0px 12px 16px -4px #00000014, 0px 4px 6px -2px #00000008, 0px 2px 2px -1px #0000000a;
+  --shadow-xl: 0px 20px 24px -4px #00000014, 0px 8px 8px -4px #00000008, 0px 3px 3px -1.5px #0000000a;
+  --shadow-2xl: 0px 24px 48px -12px #0000002e, 0px 4px 4px -2px #0000000a;
+  --shadow-skeuomorphic: 0px 0px 0px 1px #0000002e inset, 0px -2px 0px 0px #0000000d inset;
+  --shadow-xs-skeuomorphic: var(--shadow-skeuomorphic), var(--shadow-xs);
+
+  /* —— 字体 —— */
+  --font-sans: var(--font-inter, "Inter"), -apple-system, "Segoe UI", Roboto, Arial,
+    "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --font-mono: ui-monospace, "Roboto Mono", SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  --text-md: 1rem;
+  --text-md--line-height: 1.5rem;
+  --text-display-xs: 1.5rem;
+  --text-display-xs--line-height: 2rem;
+  --text-display-xs--letter-spacing: -0.36px;
+}
+
+/* ===== 基础排版（对齐他们的 html/body 规则） ===== */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scrollbar-color: color-mix(in srgb, var(--fg-quaternary) 55%, transparent) transparent;
+  }
+  html, body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-variant-ligatures: contextual;
+    font-kerning: normal;
+  }
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: var(--text-md);
+    line-height: 1.5rem;
+  }
+  ::selection { color: #fff; background: #6941c6; }
+}
+
+/* ===== 少量自定义工具类 ===== */
+@utility scrollbar-hide {
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+}
+
+@layer utilities {
+  .animate-spin-slow { animation: spin-slow 0.9s linear infinite; }
+  .animate-page-in { animation: page-in 0.22s ease; }
+  .animate-toast-in { animation: toast-in 0.2s ease; }
+  .animate-pop-in { animation: pop-in 0.14s ease; }
+}
+@keyframes spin-slow { to { transform: rotate(360deg); } }
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin-slow, .animate-page-in, .animate-toast-in, .animate-pop-in { animation: none !important; }
+  * { transition: none !important; }
+}
