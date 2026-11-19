@@ -55,12 +55,32 @@ export interface TaskLog {
 
 export interface TaskState {
   id: string; stage: string; pct: number; done: boolean; ok: boolean;
+  kind?: string;
   error?: string; game?: string;
   engine?: string;
   current?: string;
   steps?: TaskStep[];
   logs?: TaskLog[];
 }
+
+export interface WebInfo {
+  ready: boolean;
+  version?: string;
+  title?: string;
+  bytes?: number;
+  builtAt?: string;
+}
+
+export interface WebCheck {
+  supported: boolean;
+  reason?: string;
+  engine: string;
+  version: string;
+  title: string;
+  live2d: boolean;
+  windowsImports: string[];
+}
+
 export interface AppState {
   version: string;
   mode: "workspace" | "browse";
@@ -68,6 +88,7 @@ export interface AppState {
   game: string;
   dataDir?: string;
   task: TaskState;
+  web?: WebInfo;
 }
 
 async function getJSON<T>(url: string, init?: RequestInit): Promise<T> {
@@ -120,6 +141,21 @@ export function getTask(): Promise<TaskState> {
 
 export async function cancelTask(): Promise<void> {
   await getJSON("/api/task/cancel", { method: "POST" });
+}
+
+export function checkWeb(): Promise<WebCheck> {
+  return getJSON<WebCheck>("/api/web/check", { method: "POST" });
+}
+
+export async function startWebBuild(allowWindows: boolean): Promise<{ id: string }> {
+  const r = await fetch("/api/web/build", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ allowWindows }),
+  });
+  const j = await r.json().catch(() => null);
+  if (!r.ok || !j || !j.id) throw new Error((j && j.error) || `请求失败 (${r.status})`);
+  return j;
 }
 
 // 弹出服务端系统原生选择框（本地工具直接读本地路径，不走浏览器上传）

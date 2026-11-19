@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   fetchModel, getState, getTask, deleteGame, saveAsDownload, uploadFiles, relPath,
-  pickNative, unpackPath, revealInExplorer, filesFromDrop, cancelTask,
+  pickNative, unpackPath, revealInExplorer, filesFromDrop, cancelTask, startWebBuild,
   GameModel, TaskState, AppState,
 } from "../lib/api";
 import {
@@ -33,13 +33,14 @@ interface Ctx {
   refreshModel: () => Promise<void>;
   openPath: (path: string) => Promise<void>;
   stopTask: () => void;
+  buildWeb: (allowWindows: boolean) => Promise<void>;
   addToast: (type: ToastType, msg: string) => void;
 }
 
 const ModelCtx = createContext<Ctx>({
   model: null, modelErr: null, state: null, task: null, busy: false, uploadPct: null,
   stopping: false, offline: null, refreshModel: async () => {}, openPath: async () => {},
-  stopTask: () => {}, addToast: () => {},
+  stopTask: () => {}, buildWeb: async () => {}, addToast: () => {},
 });
 export const useModel = () => useContext(ModelCtx);
 
@@ -138,6 +139,13 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       }
       setTask(cur);
       if (cur.done && cur.ok) {
+        if (cur.kind === "web") {
+          getState().then(setState).catch(() => {});
+          setStopping(false);
+          toastRef.current("success", "Web 版已生成");
+          setTimeout(() => setTask((t) => (t && t.id === cur.id ? null : t)), 1500);
+          return;
+        }
         await refreshModel();
         router.push("/");
         setStopping(false);
@@ -248,6 +256,17 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       addToast("error", e?.message || String(e));
     }
   }, [task, addToast]);
+
+  const buildWeb = useCallback(async (allowWindows: boolean) => {
+    try {
+      const { id } = await startWebBuild(allowWindows);
+      setStopping(false);
+      setTask({ id, kind: "web", stage: "web-check", pct: 0, done: false, ok: false });
+      router.push("/");
+    } catch (e: any) {
+      addToast("error", e?.message || String(e));
+    }
+  }, [addToast, router]);
 
   const doDelete = useCallback(async () => {
     const name = state?.game || model?.gameName || "";
@@ -371,7 +390,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     {
       label:
         uploadPct !== null || (task && (!task.done || !task.ok || !model))
-          ? "解包"
+          ? (task?.kind === "web" ? "Web 版" : "解包")
           : !model
             ? "打开游戏文件夹"
             : PAGE_TITLES[path] || "总览",
@@ -381,7 +400,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   return (
     <ModelCtx.Provider value={{
       model, modelErr, state, task, busy, uploadPct, stopping, offline, refreshModel,
-      openPath, stopTask, addToast,
+      openPath, stopTask, buildWeb, addToast,
     }}>
       <ContextMenuProvider>
         <div className="flex h-screen flex-col overflow-hidden">

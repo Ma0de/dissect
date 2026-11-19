@@ -1,13 +1,14 @@
 "use client";
+import { useState } from "react";
 import Link from "next/link";
 import { useModel } from "../components/Shell";
 import StartView from "../components/StartView";
 import TaskView from "../components/TaskView";
-import { Badge, Button, IconButton, Alert, useContextMenu } from "../components/ui";
+import { Badge, Button, IconButton, Alert, Modal, useContextMenu } from "../components/ui";
 import {
   IconChat, IconChoice, IconFlow, IconDB, IconDoc, IconReveal, IconCopy, IconAudio,
 } from "../components/icons";
-import { humanSize, exportURL, revealInExplorer } from "../lib/api";
+import { humanSize, exportURL, revealInExplorer, checkWeb } from "../lib/api";
 
 const KIND_BAR: Record<string, string> = {
   image: "bg-brand-500",
@@ -19,8 +20,12 @@ const KIND_BAR: Record<string, string> = {
 };
 
 export default function Home() {
-  const { model, task, uploadPct, state, addToast } = useModel();
+  const { model, task, uploadPct, state, addToast, buildWeb } = useModel();
   const openCtx = useContextMenu();
+  const [conflictImports, setConflictImports] = useState<string[] | null>(null);
+  const [checkingWeb, setCheckingWeb] = useState(false);
+  const web = state?.web;
+  const webBusy = !!task && !task.done && task.kind === "web";
 
   if (uploadPct !== null || (task && (!task.done || !task.ok || !model))) {
     return <TaskView />;
@@ -28,6 +33,27 @@ export default function Home() {
   if (!model) {
     return <StartView />;
   }
+
+  const onBuildWeb = async () => {
+    if (checkingWeb || webBusy) return;
+    setCheckingWeb(true);
+    try {
+      const c = await checkWeb();
+      if (!c.supported) {
+        addToast("error", c.reason || "该游戏暂不支持生成 Web 版");
+        return;
+      }
+      if (c.windowsImports.length > 0) {
+        setConflictImports(c.windowsImports);
+        return;
+      }
+      await buildWeb(false);
+    } catch (e: any) {
+      addToast("error", e?.message || String(e));
+    } finally {
+      setCheckingWeb(false);
+    }
+  };
 
   const s = model.stats;
   const kinds = Object.entries(s.assetKinds || {}).sort((a, b) => b[1] - a[1]);
@@ -95,6 +121,41 @@ export default function Home() {
         <Stat label="语音映射" value={s.voiceMapped || 0} icon={<IconAudio />}
           hint="句台词已匹配语音" />
       </div>
+
+      <section className="border-b border-secondary py-6">
+        <SectionHead title="Game for Web" extra={
+          web?.ready ? <Badge color="success">已生成</Badge> : <Badge color="gray">未生成</Badge>
+        } />
+        <div className="flex flex-wrap items-start justify-between gap-6">
+          <div className="max-w-[720px] text-sm leading-6 text-tertiary">
+            把当前 Ren'Py 游戏转换成可以直接在浏览器里运行的 Web 版（WebAssembly），由本机托管，点开就能玩。
+            仅支持 Ren'Py 8.x；使用 Live2D 的游戏暂不支持。首次生成需要联网下载对应版本的 Ren'Py 运行时，之后复用缓存。
+          </div>
+          <div className="flex shrink-0 items-center gap-3">
+            {web?.ready && (
+              <Button variant="secondary" size="sm" onClick={() => window.open("/play/", "_blank")}>
+                试玩
+              </Button>
+            )}
+            <Button size="sm" onClick={onBuildWeb} disabled={checkingWeb || webBusy}>
+              {webBusy ? "生成中…" : web?.ready ? "重新生成" : "生成 Web 版"}
+            </Button>
+          </div>
+        </div>
+        {web?.ready && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-quaternary">
+            <span>Ren'Py {web.version}</span>
+            <span>·</span>
+            <span>{humanSize(web.bytes || 0)}</span>
+            {web.builtAt && (
+              <>
+                <span>·</span>
+                <span>{new Date(web.builtAt).toLocaleString()}</span>
+              </>
+            )}
+          </div>
+        )}
+      </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-12">
         <section className="border-b border-secondary py-6 lg:col-span-8 lg:pr-10">
@@ -183,6 +244,30 @@ export default function Home() {
           </div>
         </section>
       </div>
+
+      {conflictImports && (
+        <Modal
+          title="检测到仅 Windows 可用的导入"
+          sub={conflictImports.join("、")}
+          onClose={() => setConflictImports(null)}
+          actions={
+            <>
+              <Button variant="secondary" onClick={() => setConflictImports(null)}>取消</Button>
+              <Button onClick={() => { setConflictImports(null); buildWeb(true); }}>继续生成</Button>
+            </>
+          }
+        >
+          <div className="mt-4 space-y-2 text-sm leading-6 text-tertiary">
+            <p>这些模块只存在于 Windows 桌面版 Ren'Py。Web 版会注入兼容桩让脚本先加载，但：</p>
+            <ul className="list-disc space-y-1 pl-5">
+              <li>依赖它们的系统功能会静默失效，例如 Windows TTS、外部进程调用、窗口与截图控制；</li>
+              <li>如果游戏在初始化阶段就直接调用这些系统 API，Web 版可能启动失败，任务日志里会给出具体错误；</li>
+              <li>生成失败不会影响已有的解包结果，可以随时重试。</li>
+            </ul>
+            <p>你可以先继续生成，看看实际能不能跑起来。</p>
+          </div>
+        </Modal>
+      )}
     </>
   );
 }
