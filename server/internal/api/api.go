@@ -33,6 +33,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -40,6 +41,7 @@ import (
 
 	"dissect/internal/extract"
 	"dissect/internal/model"
+	"dissect/internal/webbuild"
 )
 
 //go:embed all:out
@@ -72,6 +74,7 @@ type TaskStep struct {
 // TaskState 一次解包任务的状态。
 type TaskState struct {
 	ID      string     `json:"id"`
+	Kind    string     `json:"kind,omitempty"`
 	Stage   string     `json:"stage"`
 	Pct     float64    `json:"pct"`
 	Done    bool       `json:"done"`
@@ -82,6 +85,15 @@ type TaskState struct {
 	Current string     `json:"current,omitempty"`
 	Steps   []TaskStep `json:"steps,omitempty"`
 	Logs    []TaskLog  `json:"logs,omitempty"`
+}
+
+// WebInfo 当前已生成的 Web 版信息。
+type WebInfo struct {
+	Ready   bool   `json:"ready"`
+	Version string `json:"version,omitempty"`
+	Title   string `json:"title,omitempty"`
+	Bytes   int64  `json:"bytes,omitempty"`
+	BuiltAt string `json:"builtAt,omitempty"`
 }
 
 // Server 交互式 Web 服务。
@@ -95,6 +107,7 @@ type Server struct {
 	stageKey string
 	stepKey  string
 	game     string
+	web      WebInfo
 }
 
 // New 创建服务并确定输出目录。
@@ -110,9 +123,31 @@ func New(o Options) *Server {
 	if name := readGameName(s.outDir); name != "" {
 		s.game = name
 	}
+	s.web = readWebInfo(s.outDir)
 	// Done=true 表示当前没有进行中的任务（零值会被前端误判为解包中）
 	s.task = TaskState{Done: true}
 	return s
+}
+
+func readWebInfo(dir string) WebInfo {
+	if _, err := os.Stat(filepath.Join(dir, "web", "index.html")); err != nil {
+		return WebInfo{}
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "web", "meta.json"))
+	if err != nil {
+		return WebInfo{}
+	}
+	var meta webbuild.Meta
+	if json.Unmarshal(b, &meta) != nil {
+		return WebInfo{}
+	}
+	return WebInfo{
+		Ready:   true,
+		Version: meta.Version,
+		Title:   meta.Title,
+		Bytes:   meta.Bytes,
+		BuiltAt: meta.BuiltAt,
+	}
 }
 
 func stageParts(stage string) (string, string) {
@@ -141,6 +176,16 @@ func stageParts(stage string) (string, string) {
 		return "dump", "正在运行 Il2CppDumper…"
 	case stage == "parse dump.cs":
 		return "parseR", "正在解析 dump.cs…"
+	case stage == "web-check":
+		return "web-check", "正在检查 Web 兼容性…"
+	case stage == "web-runtime":
+		return "web-runtime", "正在准备 Web 运行时…"
+	case stage == "web-sdk":
+		return "web-sdk", "正在准备 Ren'Py 运行库…"
+	case stage == "web-assemble":
+		return "web-assemble", "正在组装 Web 版…"
+	case stage == "web-done":
+		return "web-done", "正在收尾…"
 	}
 	return "", stage
 }
@@ -152,6 +197,15 @@ type stepDef struct {
 }
 
 func (s *Server) stepDefs(engine string) []stepDef {
+	if s.task.Kind == "web" {
+		return []stepDef{
+			{"wcheck", "检测", []string{"web-check"}},
+			{"wruntime", "运行时", []string{"web-runtime"}},
+			{"wsdk", "运行库", []string{"web-sdk"}},
+			{"wbuild", "组装", []string{"web-assemble"}},
+			{"wdone", "完成", []string{"web-done"}},
+		}
+	}
 	switch engine {
 	case "renpy":
 		return []stepDef{
@@ -260,7 +314,7 @@ func (s *Server) logf(level, format string, args ...any) {
 	s.mu.Unlock()
 }
 
-func (s *Server) beginTask(stage string) (string, context.Context, bool) {
+func (s *Server) beginTask(kind, stage string) (string, context.Context, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.running {
@@ -272,7 +326,7 @@ func (s *Server) beginTask(stage string) (string, context.Context, bool) {
 	s.cancel = cancel
 	s.stageKey = ""
 	s.stepKey = ""
-	s.task = TaskState{ID: id, Stage: stage, Pct: 0}
+	s.task = TaskState{ID: id, Kind: kind, Stage: stage, Pct: 0}
 	key, current := stageParts(stage)
 	s.task.Current = current
 	s.buildStepsLocked("")
@@ -342,6 +396,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/reveal", s.handleReveal)
 	mux.HandleFunc("GET /api/task", s.handleTask)
 	mux.HandleFunc("POST /api/task/cancel", s.handleCancel)
+	mux.HandleFunc("POST /api/web/check", s.handleWebCheck)
+	mux.HandleFunc("POST /api/web/build", s.handleWebBuild)
+	mux.HandleFunc("GET /api/web", s.handleWebInfo)
+	mux.HandleFunc("/play/", s.handlePlay)
+	mux.HandleFunc("/play", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/play/", http.StatusFound)
+	})
 	mux.HandleFunc("POST /api/delete", s.handleDelete)
 	mux.HandleFunc("GET /api/download", s.handleDownload)
 	mux.HandleFunc("/api/headers/", s.handleHeaders)
@@ -379,7 +440,7 @@ func (s *Server) ListenAndServe() error { return http.ListenAndServe(s.o.Addr, s
 
 func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
-	t, game := s.task, s.game
+	t, game, web := s.task, s.game, s.web
 	s.mu.Unlock()
 	mode := "browse"
 	if s.o.BaseDir != "" {
@@ -392,6 +453,7 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 		"game":     game,
 		"dataDir":  s.outDir,
 		"task":     t,
+		"web":      web,
 	})
 }
 
@@ -436,7 +498,7 @@ func (s *Server) handleUnpack(w http.ResponseWriter, r *http.Request) {
 			"浏览模式（serve <目录>）不支持上传；直接双击 dissect 启动即可拖拽解包")
 		return
 	}
-	id, ctx, ok := s.beginTask("接收文件")
+	id, ctx, ok := s.beginTask("unpack", "接收文件")
 	if !ok {
 		httpErrorJSON(w, http.StatusConflict, "已有解包任务进行中，请等待完成")
 		return
@@ -510,7 +572,7 @@ func (s *Server) handleUnpackPath(w http.ResponseWriter, r *http.Request) {
 		httpErrorJSON(w, http.StatusBadRequest, "路径不存在或不可访问: "+req.Path)
 		return
 	}
-	id, ctx, ok := s.beginTask("准备解包")
+	id, ctx, ok := s.beginTask("unpack", "准备解包")
 	if !ok {
 		httpErrorJSON(w, http.StatusConflict, "已有解包任务进行中，请等待完成")
 		return
@@ -596,6 +658,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.task = TaskState{Done: true}
 	s.game = ""
+	s.web = WebInfo{}
 	s.stageKey = ""
 	s.stepKey = ""
 	s.running = false
@@ -673,6 +736,132 @@ func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, p)
 }
 
+// ---- Web 版 ----
+
+func (s *Server) loadModel() (*model.GameModel, error) {
+	b, err := os.ReadFile(filepath.Join(s.outDir, "model.json"))
+	if err != nil {
+		return nil, errors.New("请先解包一个游戏")
+	}
+	var m model.GameModel
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+	m.Normalize()
+	return &m, nil
+}
+
+func (s *Server) handleWebCheck(w http.ResponseWriter, r *http.Request) {
+	m, err := s.loadModel()
+	if err != nil {
+		httpErrorJSON(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, webbuild.Inspect(s.outDir, m))
+}
+
+func (s *Server) handleWebInfo(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	web := s.web
+	s.mu.Unlock()
+	writeJSON(w, web)
+}
+
+func (s *Server) handleWebBuild(w http.ResponseWriter, r *http.Request) {
+	if s.o.BaseDir == "" {
+		httpErrorJSON(w, http.StatusForbidden, "浏览模式不支持生成 Web 版")
+		return
+	}
+	m, err := s.loadModel()
+	if err != nil {
+		httpErrorJSON(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	var req struct {
+		AllowWindows bool `json:"allowWindows"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	c := webbuild.Inspect(s.outDir, m)
+	if !c.Supported {
+		httpErrorJSON(w, http.StatusBadRequest, c.Reason)
+		return
+	}
+	if len(c.WindowsImports) > 0 && !req.AllowWindows {
+		httpErrorJSON(w, http.StatusConflict,
+			"检测到仅 Windows 可用的导入："+strings.Join(c.WindowsImports, "、")+"；如继续，相关功能会失效")
+		return
+	}
+	id, ctx, ok := s.beginTask("web", "web-check")
+	if !ok {
+		httpErrorJSON(w, http.StatusConflict, "已有任务进行中，请等待完成")
+		return
+	}
+	go s.runWebBuild(ctx, id, c, m, req.AllowWindows)
+	writeJSON(w, map[string]any{"id": id})
+}
+
+func (s *Server) runWebBuild(ctx context.Context, id string, c webbuild.Check, m *model.GameModel, allowWindows bool) {
+	defer s.resetRunning()
+	stubs := []string{}
+	if allowWindows {
+		stubs = c.WindowsImports
+		if len(stubs) > 0 {
+			s.logf("warn", "已注入兼容桩：%s（相关系统功能不可用）", strings.Join(stubs, "、"))
+		}
+	}
+	_, err := webbuild.Build(webbuild.Options{
+		OutDir:    s.outDir,
+		CacheDir:  filepath.Join(s.o.BaseDir, "runtimes"),
+		Version:   c.Version,
+		Title:     m.GameName,
+		SourceDir: m.SourceDir,
+		Live2D:    c.Live2D,
+		Stubs:     stubs,
+		Ctx:       ctx,
+		Progress:  s.progress,
+		Log:       func(level, msg string) { s.logf(level, "%s", msg) },
+	})
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			s.finishCancelled(id)
+			return
+		}
+		s.finish(id, false, err.Error(), "")
+		return
+	}
+	s.finish(id, true, "", m.GameName)
+}
+
+func (s *Server) handlePlay(w http.ResponseWriter, r *http.Request) {
+	rel := strings.TrimPrefix(r.URL.Path, "/play/")
+	rel = strings.TrimPrefix(path.Clean("/"+rel), "/")
+	if rel == "" || strings.HasSuffix(r.URL.Path, "/") {
+		rel = path.Join(rel, "index.html")
+	}
+	root := filepath.Join(s.outDir, "web")
+	full := filepath.Join(root, filepath.FromSlash(rel))
+	if !strings.HasPrefix(full, root+string(os.PathSeparator)) {
+		http.NotFound(w, r)
+		return
+	}
+	if _, err := os.Stat(full); err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	switch strings.ToLower(filepath.Ext(full)) {
+	case ".wasm":
+		w.Header().Set("Content-Type", "application/wasm")
+	case ".data", ".zip":
+		w.Header().Set("Content-Type", "application/octet-stream")
+	case ".js":
+		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Cross-Origin-Opener-Policy", "same-origin")
+	w.Header().Set("Cross-Origin-Embedder-Policy", "require-corp")
+	http.ServeFile(w, r, full)
+}
+
 // ---- 解包任务 ----
 
 // runUnpack 在后台执行解包，进度写入 task。
@@ -689,6 +878,9 @@ func (s *Server) runUnpack(ctx context.Context, id, src, incoming string) {
 		s.finish(id, false, "清空输出目录失败: "+err.Error(), "")
 		return
 	}
+	s.mu.Lock()
+	s.web = WebInfo{}
+	s.mu.Unlock()
 	m, err := extract.Unpack(src, s.outDir, extract.Opts{
 		Python:        s.o.Python,
 		UnrpycDir:     s.o.UnrpycDir,
@@ -721,6 +913,18 @@ func (s *Server) finish(id string, ok bool, errMsg, game string) {
 	s.task.Game = game
 	if ok {
 		s.task.Pct = 1
+		if s.task.Kind == "web" {
+			s.task.Current = "Web 版已生成"
+			for i := range s.task.Steps {
+				switch s.task.Steps[i].State {
+				case "running", "pending", "":
+					s.task.Steps[i].State = "done"
+				}
+			}
+			s.appendLogLocked("success", "Web 版生成完成")
+			s.web = readWebInfo(s.outDir)
+			return
+		}
 		s.task.Current = "任务完成"
 		for i := range s.task.Steps {
 			switch s.task.Steps[i].State {
