@@ -20,3 +20,4 @@
 ## 反馈
 
 开一个 Issues 或者自己修复、添加新功能然后提一个 PR
+当然你也可以在这里用中文发邮件联系我 github-maode@maodelab.com
