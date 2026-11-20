@@ -442,7 +442,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                   {menu === "help" && (
                     <div className="absolute left-0 top-full mt-1">
                       <MenuPanel>
-                        <MenuItem item={{ label: `版本 v${state?.version || "0.5.0"}`, icon: <IconRefresh />, onClick: () => { setMenu(null); setVersionDlg(true); } }} />
+                        <MenuItem item={{ label: `版本 v${state?.version || "0.6.0"}`, icon: <IconRefresh />, onClick: () => { setMenu(null); setVersionDlg(true); } }} />
                       </MenuPanel>
                     </div>
                   )}
@@ -539,7 +539,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           </div>
 
           {versionDlg && (
-            <Modal title={`dissect v${state?.version || "0.5.0"}`}
+            <Modal title={`dissect v${state?.version || "0.6.0"}`}
               sub={`${mode === "workspace" ? "WebUI 工作区模式" : "浏览模式"}`}
               onClose={() => setVersionDlg(false)}
               actions={<Button onClick={() => setVersionDlg(false)}>关闭</Button>} />
