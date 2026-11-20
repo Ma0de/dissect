@@ -106,8 +106,9 @@ type Server struct {
 	cancel   context.CancelFunc
 	stageKey string
 	stepKey  string
-	game     string
-	web      WebInfo
+	game      string
+	web       WebInfo
+	exporting bool
 }
 
 // New 创建服务并确定输出目录。
@@ -399,6 +400,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/web/check", s.handleWebCheck)
 	mux.HandleFunc("POST /api/web/build", s.handleWebBuild)
 	mux.HandleFunc("GET /api/web", s.handleWebInfo)
+	mux.HandleFunc("POST /api/web/export", s.handleWebExport)
 	mux.HandleFunc("/play/", s.handlePlay)
 	mux.HandleFunc("/play", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/play/", http.StatusFound)
@@ -457,13 +459,20 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleReveal 在系统文件管理器中显示输出目录（资源管理器快速定位）。
+// handleReveal 在系统文件管理器中显示目录（默认输出目录，可用 ?path= 指定导出目录）。
 func (s *Server) handleReveal(w http.ResponseWriter, r *http.Request) {
-	if _, err := os.Stat(s.outDir); err != nil {
-		httpErrorJSON(w, http.StatusNotFound, "输出目录还不存在：先完成一次解包")
+	target := strings.TrimSpace(r.URL.Query().Get("path"))
+	if target == "" {
+		target = s.outDir
+	} else if !filepath.IsAbs(target) {
+		httpErrorJSON(w, http.StatusBadRequest, "路径必须是绝对路径")
 		return
 	}
-	if err := revealPath(s.outDir); err != nil {
+	if _, err := os.Stat(target); err != nil {
+		httpErrorJSON(w, http.StatusNotFound, "目录还不存在："+target)
+		return
+	}
+	if err := revealPath(target); err != nil {
 		httpErrorJSON(w, http.StatusInternalServerError, "打开文件管理器失败: "+err.Error())
 		return
 	}
@@ -538,13 +547,13 @@ func (s *Server) handleUnpack(w http.ResponseWriter, r *http.Request) {
 
 // handlePick 弹出系统原生选择框（不读取文件内容，只返回路径）。
 func (s *Server) handlePick(w http.ResponseWriter, r *http.Request) {
-	if s.o.BaseDir == "" {
+	kind := r.URL.Query().Get("kind")
+	if kind != "zip" && kind != "export-dir" {
+		kind = "dir"
+	}
+	if s.o.BaseDir == "" && kind != "export-dir" {
 		httpErrorJSON(w, http.StatusForbidden, "浏览模式不需要打开：当前展示的就是指定目录")
 		return
-	}
-	kind := r.URL.Query().Get("kind")
-	if kind != "zip" {
-		kind = "dir"
 	}
 	path, err := pickDialog(kind)
 	if err != nil {
@@ -791,6 +800,13 @@ func (s *Server) handleWebBuild(w http.ResponseWriter, r *http.Request) {
 			"检测到仅 Windows 可用的导入："+strings.Join(c.WindowsImports, "、")+"；如继续，相关功能会失效")
 		return
 	}
+	s.mu.Lock()
+	busyExport := s.exporting
+	s.mu.Unlock()
+	if busyExport {
+		httpErrorJSON(w, http.StatusConflict, "正在导出静态站点，请等待完成")
+		return
+	}
 	id, ctx, ok := s.beginTask("web", "web-check")
 	if !ok {
 		httpErrorJSON(w, http.StatusConflict, "已有任务进行中，请等待完成")
@@ -830,6 +846,57 @@ func (s *Server) runWebBuild(ctx context.Context, id string, c webbuild.Check, m
 		return
 	}
 	s.finish(id, true, "", m.GameName)
+}
+
+func (s *Server) handleWebExport(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Dest   string `json:"dest"`
+		Format string `json:"format"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httpErrorJSON(w, http.StatusBadRequest, "请求格式不正确")
+		return
+	}
+	webDir := filepath.Join(s.outDir, "web")
+	if _, err := os.Stat(filepath.Join(webDir, "index.html")); err != nil {
+		httpErrorJSON(w, http.StatusBadRequest, "还没有生成 Web 版，请先生成")
+		return
+	}
+	s.mu.Lock()
+	if s.exporting || s.running {
+		s.mu.Unlock()
+		httpErrorJSON(w, http.StatusConflict, "正在导出或生成，请等待当前操作完成")
+		return
+	}
+	s.exporting = true
+	title := s.game
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		s.exporting = false
+		s.mu.Unlock()
+	}()
+
+	var meta webbuild.Meta
+	if b, err := os.ReadFile(filepath.Join(webDir, "meta.json")); err == nil {
+		_ = json.Unmarshal(b, &meta)
+	}
+	if title == "" {
+		title = meta.Title
+	}
+	res, err := webbuild.ExportStatic(webbuild.ExportOptions{
+		SrcDir:  webDir,
+		Dest:    req.Dest,
+		Title:   title,
+		Version: meta.Version,
+		Zip:     strings.EqualFold(req.Format, "zip"),
+	})
+	if err != nil {
+		httpErrorJSON(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.logf("success", "静态站点已导出：%s（%.1f MB）", res.Path, float64(res.Bytes)/1048576)
+	writeJSON(w, map[string]any{"path": res.Path, "bytes": res.Bytes, "files": res.Files})
 }
 
 func (s *Server) handlePlay(w http.ResponseWriter, r *http.Request) {

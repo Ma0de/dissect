@@ -8,7 +8,7 @@ import { Badge, Button, IconButton, Alert, Modal, useContextMenu } from "../comp
 import {
   IconChat, IconChoice, IconFlow, IconDB, IconDoc, IconReveal, IconCopy, IconAudio,
 } from "../components/icons";
-import { humanSize, exportURL, revealInExplorer, checkWeb } from "../lib/api";
+import { humanSize, exportURL, revealInExplorer, checkWeb, pickNative, exportStaticSite, WebExportResult } from "../lib/api";
 
 const KIND_BAR: Record<string, string> = {
   image: "bg-brand-500",
@@ -24,6 +24,9 @@ export default function Home() {
   const openCtx = useContextMenu();
   const [conflictImports, setConflictImports] = useState<string[] | null>(null);
   const [checkingWeb, setCheckingWeb] = useState(false);
+  const [exportDlg, setExportDlg] = useState(false);
+  const [exporting, setExporting] = useState<"folder" | "zip" | null>(null);
+  const [exported, setExported] = useState<WebExportResult | null>(null);
   const web = state?.web;
   const webBusy = !!task && !task.done && task.kind === "web";
 
@@ -52,6 +55,26 @@ export default function Home() {
       addToast("error", e?.message || String(e));
     } finally {
       setCheckingWeb(false);
+    }
+  };
+
+  const onExportStatic = async (format: "folder" | "zip") => {
+    if (exporting) return;
+    try {
+      const { path, error } = await pickNative("export-dir");
+      if (error) {
+        addToast("error", error);
+        return;
+      }
+      if (!path) return;
+      setExporting(format);
+      const res = await exportStaticSite(path, format);
+      setExported(res);
+      addToast("success", "静态站点已导出");
+    } catch (e: any) {
+      addToast("error", e?.message || String(e));
+    } finally {
+      setExporting(null);
     }
   };
 
@@ -129,9 +152,15 @@ export default function Home() {
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div className="max-w-[720px] text-sm leading-6 text-tertiary">
             把当前 Ren'Py 游戏转换成可以直接在浏览器里运行的 Web 版（WebAssembly），由本机托管，点开就能玩。
+            也可以导出成不依赖 dissect 的静态站点，上传到任意静态服务器对外提供。
             仅支持 Ren'Py 8.x；使用 Live2D 的游戏暂不支持。首次生成需要联网下载对应版本的 Ren'Py 运行时，之后复用缓存。
           </div>
           <div className="flex shrink-0 items-center gap-3">
+            {web?.ready && (
+              <Button variant="secondary" size="sm" onClick={() => { setExported(null); setExportDlg(true); }}>
+                导出静态站点
+              </Button>
+            )}
             {web?.ready && (
               <Button variant="secondary" size="sm" onClick={() => window.open("/play/", "_blank")}>
                 试玩
@@ -244,6 +273,57 @@ export default function Home() {
           </div>
         </section>
       </div>
+
+      {exportDlg && (
+        <Modal
+          title={exported ? "静态站点已导出" : "导出静态站点"}
+          sub={exported ? undefined : "导出的站点不依赖 dissect，可直接部署到任意静态服务器"}
+          onClose={() => { if (exporting) return; setExportDlg(false); setExported(null); }}
+          actions={exported ? (
+            <>
+              <Button variant="secondary" onClick={() => {
+                navigator.clipboard?.writeText(exported.path).catch(() => {});
+                addToast("success", "路径已复制");
+              }}>复制路径</Button>
+              <Button variant="secondary" onClick={() => { revealInExplorer(exported.path).catch(() => {}); }}>
+                在资源管理器中显示
+              </Button>
+              <Button onClick={() => { setExportDlg(false); setExported(null); }}>完成</Button>
+            </>
+          ) : (
+            <>
+              <Button variant="secondary" disabled={!!exporting} onClick={() => setExportDlg(false)}>取消</Button>
+              <Button variant="secondary" disabled={!!exporting} onClick={() => onExportStatic("folder")}>
+                {exporting === "folder" ? "导出中…" : "复制到文件夹"}
+              </Button>
+              <Button disabled={!!exporting} onClick={() => onExportStatic("zip")}>
+                {exporting === "zip" ? "打包中…" : "打包为 ZIP"}
+              </Button>
+            </>
+          )}
+        >
+          {exported ? (
+            <div className="mt-4 space-y-2 text-sm leading-6 text-tertiary">
+              <p className="break-all font-mono text-xs text-primary">{exported.path}</p>
+              <p>共 {exported.files} 个文件，约 {humanSize(exported.bytes)}，目录里附带了一份 README.txt 部署说明。</p>
+              <p>
+                上传到任意静态 HTTP 服务器或静态托管平台即可；本机预览可在该目录执行{" "}
+                <code className="rounded bg-tertiary px-1">python -m http.server</code>。
+              </p>
+            </div>
+          ) : (
+            <div className="mt-4 space-y-2 text-sm leading-6 text-tertiary">
+              <p>导出的是完整静态站点：不依赖 dissect，也不需要任何后端，上传到静态服务器就能玩。</p>
+              <ul className="list-disc space-y-1 pl-5">
+                <li>目录：复制一份到选定文件夹，方便本机起服务器预览；</li>
+                <li>ZIP：打包成单个压缩包，方便上传到托管平台；</li>
+                <li>两种方式都会附带 README.txt（.wasm 的 MIME、体积与存档说明等）。</li>
+              </ul>
+              <p className="text-xs text-quaternary">站点约 {humanSize(web?.bytes || 0)}，导出需要一点时间。</p>
+            </div>
+          )}
+        </Modal>
+      )}
 
       {conflictImports && (
         <Modal
