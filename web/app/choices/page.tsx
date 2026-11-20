@@ -75,6 +75,11 @@ export default function Choices() {
                       href={`/flow?focus=${encodeURIComponent("L:" + (c.target || c.label))}`}>
                       在流程图中查看
                     </Link>
+                    <Link className="inline-flex items-center rounded-md px-2 py-1 text-sm font-semibold text-tertiary transition duration-100 ease-linear hover:bg-primary_hover hover:text-secondary"
+                      title={`在脚本中定位 ${c.file}:${c.line}`}
+                      href={`/script?file=${encodeURIComponent(c.file)}&line=${c.line}`}>
+                      源码
+                    </Link>
                   </div>
                 </div>
               ))}
