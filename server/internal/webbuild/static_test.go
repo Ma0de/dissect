@@ -4,7 +4,6 @@ import (
 	"archive/zip"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -36,23 +35,16 @@ func TestExportStaticFolder(t *testing.T) {
 	if want := filepath.Join(dest, "测试：游戏 Web"); res.Path != want {
 		t.Fatalf("path = %q, want %q", res.Path, want)
 	}
-	if res.Files != 4 {
-		t.Fatalf("files = %d, want 4", res.Files)
+	if res.Files != 3 {
+		t.Fatalf("files = %d, want 3", res.Files)
 	}
-	for _, rel := range []string{"index.html", "renpy.js", "icons/icon-72x72.png", "README.txt"} {
+	for _, rel := range []string{"index.html", "renpy.js", "icons/icon-72x72.png"} {
 		if _, err := os.Stat(filepath.Join(res.Path, filepath.FromSlash(rel))); err != nil {
 			t.Fatalf("%s 缺失：%v", rel, err)
 		}
 	}
-	b, err := os.ReadFile(filepath.Join(res.Path, "README.txt"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	text := string(b)
-	for _, want := range []string{"测试：游戏", "Ren'Py 8.6.0", "application/wasm", "双击 index.html"} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("README 缺少 %q", want)
-		}
+	if _, err := os.Stat(filepath.Join(res.Path, "README.txt")); err == nil {
+		t.Fatal("不应再附带 README.txt")
 	}
 	if _, err := ExportStatic(ExportOptions{SrcDir: src, Dest: dest, Title: "测试：游戏"}); err == nil {
 		t.Fatal("目标已存在时应报错")
@@ -80,10 +72,13 @@ func TestExportStaticZip(t *testing.T) {
 	for _, f := range r.File {
 		got[f.Name] = true
 	}
-	for _, name := range []string{"README.txt", "index.html", "renpy.js", "icons/icon-72x72.png"} {
+	for _, name := range []string{"index.html", "renpy.js", "icons/icon-72x72.png"} {
 		if !got[name] {
 			t.Fatalf("zip 缺少 %s（实际 %v）", name, got)
 		}
+	}
+	if got["README.txt"] {
+		t.Fatal("zip 不应再包含 README.txt")
 	}
 	if len(got) != res.Files {
 		t.Fatalf("zip 条目 %d != files %d", len(got), res.Files)

@@ -24,6 +24,21 @@ import (
 // 对话框返回 "<目录>\占位名"，Go 侧剥掉它得到真实目录。
 const winDirPlaceholder = "选择此目录"
 
+// winOwner 弹框前先显示一个 1x1 的置顶owner窗口：系统选择框随 owner 一同置顶，
+// 避免对话框弹到浏览器后面让用户以为按钮没反应。
+const winOwner = `Add-Type -AssemblyName System.Windows.Forms | Out-Null
+Add-Type -AssemblyName System.Drawing | Out-Null
+$owner = New-Object System.Windows.Forms.Form
+$owner.TopMost = $true
+$owner.ShowInTaskbar = $false
+$owner.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
+$owner.StartPosition = [System.Windows.Forms.FormStartPosition]::Manual
+$owner.Location = New-Object System.Drawing.Point(-30000, -30000)
+$owner.Size = New-Object System.Drawing.Size(1, 1)
+$owner.Show()
+$owner.Activate()
+`
+
 // pickDialog 弹出系统选择框。kind: "dir"（目录）或 "zip"（zip/.rpa 文件）。
 // 返回所选路径；用户取消返回 ("", nil)；环境不支持返回错误。
 func pickDialog(kind string) (string, error) {
@@ -32,20 +47,20 @@ func pickDialog(kind string) (string, error) {
 	switch runtime.GOOS {
 	case "windows":
 		if kind == "zip" {
-			script := utf8pre + `
-Add-Type -AssemblyName System.Windows.Forms | Out-Null
+			script := utf8pre + winOwner + `
 $d = New-Object System.Windows.Forms.OpenFileDialog
 $d.Title = '选择游戏 zip 或 .rpa 档案'
 $d.Filter = '游戏档案 (*.zip;*.rpa)|*.zip;*.rpa|所有文件 (*.*)|*.*'
-if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $d.FileName }`
+$rv = $d.ShowDialog($owner)
+$owner.Close()
+if ($rv -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $d.FileName }`
 			return runPicker("powershell", "-STA", "-NoProfile", "-Command", script)
 		}
 		title := "选择要解包的游戏目录（含 game/ 或 GameAssembly.dll 的那一层）"
 		if kind == "export-dir" {
 			title = "选择静态站点的导出位置"
 		}
-		script := utf8pre + `
-Add-Type -AssemblyName System.Windows.Forms | Out-Null
+		script := utf8pre + winOwner + `
 $d = New-Object System.Windows.Forms.OpenFileDialog
 $d.Title = '` + title + `'
 $d.Filter = 'folders|/'
@@ -53,7 +68,9 @@ $d.ValidateNames = $false
 $d.CheckFileExists = $false
 $d.CheckPathExists = $true
 $d.FileName = '` + winDirPlaceholder + `'
-if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $d.FileName }`
+$rv = $d.ShowDialog($owner)
+$owner.Close()
+if ($rv -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $d.FileName }`
 		path, err := runPicker("powershell", "-STA", "-NoProfile", "-Command", script)
 		return normalizeWinDirPick(path), err
 

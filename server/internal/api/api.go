@@ -884,19 +884,45 @@ func (s *Server) handleWebExport(w http.ResponseWriter, r *http.Request) {
 	if title == "" {
 		title = meta.Title
 	}
+	w.Header().Set("Content-Type", "application/x-ndjson; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	flusher, _ := w.(http.Flusher)
+	emit := func(v map[string]any) {
+		b, err := json.Marshal(v)
+		if err != nil {
+			return
+		}
+		if _, err := w.Write(append(b, '\n')); err == nil && flusher != nil {
+			flusher.Flush()
+		}
+	}
+
+	var lastReport time.Time
 	res, err := webbuild.ExportStatic(webbuild.ExportOptions{
 		SrcDir:  webDir,
 		Dest:    req.Dest,
 		Title:   title,
 		Version: meta.Version,
 		Zip:     strings.EqualFold(req.Format, "zip"),
+		Progress: func(done, total int64) {
+			if done < total && time.Since(lastReport) < 120*time.Millisecond {
+				return
+			}
+			lastReport = time.Now()
+			emit(map[string]any{"stage": "progress", "done": done, "total": total})
+		},
 	})
 	if err != nil {
-		httpErrorJSON(w, http.StatusBadRequest, err.Error())
+		emit(map[string]any{"stage": "error", "error": err.Error()})
 		return
 	}
 	s.logf("success", "静态站点已导出：%s（%.1f MB）", res.Path, float64(res.Bytes)/1048576)
-	writeJSON(w, map[string]any{"path": res.Path, "bytes": res.Bytes, "files": res.Files})
+	emit(map[string]any{
+		"stage": "done",
+		"path":  res.Path,
+		"bytes": res.Bytes,
+		"files": res.Files,
+	})
 }
 
 func (s *Server) handlePlay(w http.ResponseWriter, r *http.Request) {
