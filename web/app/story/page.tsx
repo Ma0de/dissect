@@ -1,15 +1,17 @@
 "use client";
 import { useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useModel } from "../../components/Shell";
 import {
   Card, Loading, EmptyState, SearchInput, Avatar, PageHead, Button,
   Badge, LoadMore, Toggle, useContextMenu,
 } from "../../components/ui";
 import { exportURL, fileURL } from "../../lib/api";
-import { IconChat, IconCopy, IconPlay, IconPause } from "../../components/icons";
+import { IconChat, IconCopy, IconPlay, IconPause, IconScript } from "../../components/icons";
 
 export default function Story() {
   const { model, modelErr: err, addToast } = useModel();
+  const router = useRouter();
   const [char, setChar] = useState<string>("");
   const [q, setQ] = useState("");
   const [limit, setLimit] = useState(300);
@@ -112,8 +114,11 @@ export default function Story() {
                 <div className="flex gap-3 border-b border-secondary px-5 py-3.5 transition-colors duration-100 ease-linear hover:bg-primary_hover"
                   key={d.id}
                   onContextMenu={(e) => openCtx(e, [
-                    { label: "复制台词文本", icon: <IconCopy />, onClick: () => navigator.clipboard?.writeText(d.text).catch(() => {}) },
-                    { label: `定位 ${d.file}:${d.line}`, disabled: true },
+                    { label: "复制台词文本", icon: <IconCopy />, onClick: () => { navigator.clipboard?.writeText(d.text).catch(() => {}); addToast("success", "台词文本已复制"); } },
+                    {
+                      label: `定位 ${d.file}:${d.line}`, icon: <IconScript />,
+                      onClick: () => router.push(`/script?file=${encodeURIComponent(d.file)}&line=${d.line}`),
+                    },
                   ])}>
                   <div className="w-36 shrink-0">
                     <div className="flex items-center gap-2">
@@ -122,9 +127,12 @@ export default function Story() {
                         {charName(d.speaker)}
                       </div>
                     </div>
-                    <div className="mt-1 truncate font-mono text-xs text-quaternary" title={`${d.file}:${d.line}`}>
+                    <button
+                      className="mt-1 block max-w-full cursor-pointer truncate text-left font-mono text-xs text-quaternary underline decoration-transparent underline-offset-2 transition duration-100 ease-linear hover:text-fg-brand-secondary hover:decoration-current"
+                      title={`在脚本中定位 ${d.file}:${d.line}`}
+                      onClick={() => router.push(`/script?file=${encodeURIComponent(d.file)}&line=${d.line}`)}>
                       {d.file.split("_").slice(1).join("_") || d.file}:{d.line}
-                    </div>
+                    </button>
                   </div>
                   <div className="min-w-0 flex-1 whitespace-pre-wrap text-sm leading-relaxed text-primary">
                     {d.text}

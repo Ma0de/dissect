@@ -12,7 +12,7 @@ import {
   ContextMenuProvider, Breadcrumb, Modal,
 } from "./ui";
 import {
-  IconHome, IconChat, IconChoice, IconFlow, IconDB, IconLayers, IconCode,
+  IconHome, IconChat, IconChoice, IconFlow, IconDB, IconLayers, IconCode, IconScript,
   IconFolderOpen, IconFileZip, IconReveal, IconTrash, IconDownload, IconRefresh,
   IconMoon, IconSun, IconX, IconAlert,
 } from "./icons";
@@ -46,7 +46,7 @@ export const useModel = () => useContext(ModelCtx);
 
 const PAGE_TITLES: Record<string, string> = {
   "/": "总览", "/story": "剧情文案", "/choices": "选项分支", "/flow": "流程图",
-  "/fields": "字段", "/resources": "资源", "/headers": "头文件",
+  "/fields": "字段", "/resources": "资源", "/headers": "头文件", "/script": "脚本",
 };
 
 export default function Shell({ children }: { children: React.ReactNode }) {
@@ -378,6 +378,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     { href: "/fields", label: "字段", icon: <IconDB />, count: model ? String(model.fields.length) : "" },
     { href: "/resources", label: "资源", icon: <IconLayers />, count: model ? String(model.assets.length) : "" },
     { href: "/headers", label: "头文件", icon: <IconCode />, count: model && model.headers.length ? String(model.headers.length) : "" },
+    { href: "/script", label: "脚本", icon: <IconScript />, count: model ? String(model.scriptFiles.length) : "" },
   ];
 
   const menuBtnCls = (open: boolean) =>

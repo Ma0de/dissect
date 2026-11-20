@@ -23,6 +23,7 @@ package api
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"embed"
 	"encoding/json"
@@ -35,6 +36,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -407,7 +409,9 @@ func (s *Server) Handler() http.Handler {
 	})
 	mux.HandleFunc("POST /api/delete", s.handleDelete)
 	mux.HandleFunc("GET /api/download", s.handleDownload)
-	mux.HandleFunc("/api/headers/", s.handleHeaders)
+	mux.HandleFunc("GET /api/headers/", s.handleHeaders)
+	mux.HandleFunc("GET /api/scripts", s.handleScripts)
+	mux.HandleFunc("GET /api/script", s.handleScript)
 	mux.HandleFunc("/api/export/", s.handleExport)
 	mux.Handle("/assets/", http.StripPrefix("/assets/",
 		http.FileServer(http.Dir(filepath.Join(s.outDir, "assets")))))
@@ -743,6 +747,58 @@ func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.ServeFile(w, r, p)
+}
+
+// ---- 脚本查看 ----
+
+type scriptEntry struct {
+	Name  string `json:"name"`
+	Lines int    `json:"lines"`
+	Size  int64  `json:"size"`
+}
+
+func (s *Server) scriptsDir() string { return filepath.Join(s.outDir, "scripts") }
+
+func (s *Server) handleScripts(w http.ResponseWriter, r *http.Request) {
+	dir := s.scriptsDir()
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		writeJSON(w, []scriptEntry{})
+		return
+	}
+	out := make([]scriptEntry, 0, len(ents))
+	for _, e := range ents {
+		if e.IsDir() || !strings.HasSuffix(strings.ToLower(e.Name()), ".rpy") {
+			continue
+		}
+		fi, err := e.Info()
+		if err != nil {
+			continue
+		}
+		lines := 0
+		if b, err := os.ReadFile(filepath.Join(dir, e.Name())); err == nil {
+			lines = bytes.Count(b, []byte{'\n'}) + 1
+		}
+		out = append(out, scriptEntry{Name: e.Name(), Lines: lines, Size: fi.Size()})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	writeJSON(w, out)
+}
+
+func (s *Server) handleScript(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.URL.Query().Get("name"))
+	if name == "" || filepath.Base(name) != name || !strings.HasSuffix(strings.ToLower(name), ".rpy") {
+		httpErrorJSON(w, http.StatusBadRequest, "脚本名不正确")
+		return
+	}
+	b, err := os.ReadFile(filepath.Join(s.scriptsDir(), name))
+	if err != nil {
+		httpErrorJSON(w, http.StatusNotFound, "找不到脚本："+name)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(b)
 }
 
 // ---- Web 版 ----

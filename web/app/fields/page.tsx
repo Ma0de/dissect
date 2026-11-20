@@ -1,6 +1,7 @@
 // 字段页：store / persistent / 类字段 / screen 参数
 "use client";
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useModel } from "../../components/Shell";
 import {
   Card, Loading, EmptyState, SearchInput, Badge, PageHead, Button,
@@ -104,7 +105,16 @@ export default function Fields() {
                   <Td><Badge color={kindBadgeColor(scopeGroup(f.scope))}>{f.scope}</Badge></Td>
                   <Td><Badge color="gray">{f.type}</Badge></Td>
                   <Td mono dim className="max-w-[220px] truncate">{f.default || "-"}</Td>
-                  <Td mono dim>{f.file}:{f.line}</Td>
+                  <Td mono dim>
+                    {f.file ? (
+                      <Link
+                        className="underline decoration-transparent underline-offset-2 hover:text-fg-brand-secondary hover:decoration-current"
+                        title={`在脚本中定位 ${f.file}:${f.line}`}
+                        href={`/script?file=${encodeURIComponent(f.file)}&line=${f.line ?? 0}`}>
+                        {f.file}{f.line ? `:${f.line}` : ""}
+                      </Link>
+                    ) : "-"}
+                  </Td>
                   <Td dim>{f.keyword}</Td>
                 </Tr>
               ))}
