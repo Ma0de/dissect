@@ -31,53 +31,64 @@ func pickDialog(kind string) (string, error) {
 	const utf8pre = "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; "
 	switch runtime.GOOS {
 	case "windows":
-		if kind == "dir" {
+		if kind == "zip" {
 			script := utf8pre + `
 Add-Type -AssemblyName System.Windows.Forms | Out-Null
 $d = New-Object System.Windows.Forms.OpenFileDialog
-$d.Title = '选择要解包的游戏目录（含 game/ 或 GameAssembly.dll 的那一层）'
+$d.Title = '选择游戏 zip 或 .rpa 档案'
+$d.Filter = '游戏档案 (*.zip;*.rpa)|*.zip;*.rpa|所有文件 (*.*)|*.*'
+if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $d.FileName }`
+			return runPicker("powershell", "-STA", "-NoProfile", "-Command", script)
+		}
+		title := "选择要解包的游戏目录（含 game/ 或 GameAssembly.dll 的那一层）"
+		if kind == "export-dir" {
+			title = "选择静态站点的导出位置"
+		}
+		script := utf8pre + `
+Add-Type -AssemblyName System.Windows.Forms | Out-Null
+$d = New-Object System.Windows.Forms.OpenFileDialog
+$d.Title = '` + title + `'
 $d.Filter = 'folders|/'
 $d.ValidateNames = $false
 $d.CheckFileExists = $false
 $d.CheckPathExists = $true
 $d.FileName = '` + winDirPlaceholder + `'
 if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $d.FileName }`
-			path, err := runPicker("powershell", "-STA", "-NoProfile", "-Command", script)
-			return normalizeWinDirPick(path), err
-		}
-		script := utf8pre + `
-Add-Type -AssemblyName System.Windows.Forms | Out-Null
-$d = New-Object System.Windows.Forms.OpenFileDialog
-$d.Title = '选择游戏 zip 或 .rpa 档案'
-$d.Filter = '游戏档案 (*.zip;*.rpa)|*.zip;*.rpa|所有文件 (*.*)|*.*'
-if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $d.FileName }`
-		return runPicker("powershell", "-STA", "-NoProfile", "-Command", script)
+		path, err := runPicker("powershell", "-STA", "-NoProfile", "-Command", script)
+		return normalizeWinDirPick(path), err
 
 	case "darwin":
-		if kind == "dir" {
+		if kind == "zip" {
 			return runPicker("osascript", "-e",
-				`POSIX path of (choose folder with prompt "选择要解包的游戏目录")`)
+				`POSIX path of (choose file with prompt "选择游戏 zip 或 .rpa")`)
+		}
+		title := "选择要解包的游戏目录"
+		if kind == "export-dir" {
+			title = "选择静态站点的导出位置"
 		}
 		return runPicker("osascript", "-e",
-			`POSIX path of (choose file with prompt "选择游戏 zip 或 .rpa")`)
+			`POSIX path of (choose folder with prompt "`+title+`")`)
 
 	default: // linux 及其他
 		title := "选择要解包的游戏目录"
 		if kind == "zip" {
 			title = "选择游戏 zip 或 .rpa 档案"
 		}
+		if kind == "export-dir" {
+			title = "选择静态站点的导出位置"
+		}
 		if _, err := exec.LookPath("zenity"); err == nil {
-			if kind == "dir" {
-				return runPicker("zenity", "--file-selection", "--directory", "--title", title)
+			if kind == "zip" {
+				return runPicker("zenity", "--file-selection", "--title", title,
+					"--file-filter", "游戏档案 | *.zip *.rpa", "--file-filter", "所有文件 | *")
 			}
-			return runPicker("zenity", "--file-selection", "--title", title,
-				"--file-filter", "游戏档案 | *.zip *.rpa", "--file-filter", "所有文件 | *")
+			return runPicker("zenity", "--file-selection", "--directory", "--title", title)
 		}
 		if _, err := exec.LookPath("kdialog"); err == nil {
-			if kind == "dir" {
-				return runPicker("kdialog", "--getexistingdirectory", ".", "--title", title)
+			if kind == "zip" {
+				return runPicker("kdialog", "--getopenfilename", ".", "*.zip *.rpa|游戏档案", "--title", title)
 			}
-			return runPicker("kdialog", "--getopenfilename", ".", "*.zip *.rpa|游戏档案", "--title", title)
+			return runPicker("kdialog", "--getexistingdirectory", ".", "--title", title)
 		}
 		return "", fmt.Errorf("当前环境没有系统选择框（未找到 zenity/kdialog）。" +
 			"本地使用请安装 zenity，或远程使用时直接粘贴路径 / 把文件拖进窗口上传")

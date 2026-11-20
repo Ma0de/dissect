@@ -159,11 +159,29 @@ export async function startWebBuild(allowWindows: boolean): Promise<{ id: string
 }
 
 // 弹出服务端系统原生选择框（本地工具直接读本地路径，不走浏览器上传）
-export async function pickNative(kind: "dir" | "zip"): Promise<{ path: string; error?: string }> {
+export async function pickNative(kind: "dir" | "zip" | "export-dir"): Promise<{ path: string; error?: string }> {
   const r = await fetch(`/api/pick?kind=${kind}`, { method: "POST" });
   const j = await r.json().catch(() => null);
   if (!j) throw new Error(`请求失败 (${r.status})`);
   return j;
+}
+
+export interface WebExportResult {
+  path: string;
+  bytes: number;
+  files: number;
+}
+
+// 把已生成的 Web 版导出为不依赖 dissect 的静态站点（目录或 zip）
+export async function exportStaticSite(dest: string, format: "folder" | "zip"): Promise<WebExportResult> {
+  const r = await fetch("/api/web/export", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dest, format }),
+  });
+  const j = await r.json().catch(() => null);
+  if (!r.ok || !j || !j.path) throw new Error((j && j.error) || `导出失败 (${r.status})`);
+  return j as WebExportResult;
 }
 
 // 直接解包本地路径（文件 ▸ 打开 / 落地页按钮的主路径）
@@ -183,8 +201,9 @@ export async function deleteGame(): Promise<void> {
 }
 
 // 在系统文件管理器中显示输出目录（Windows explorer /select、mac open -R、linux xdg-open）
-export async function revealInExplorer(): Promise<void> {
-  await getJSON("/api/reveal", { method: "POST" });
+export async function revealInExplorer(path?: string): Promise<void> {
+  const q = path ? `?path=${encodeURIComponent(path)}` : "";
+  await getJSON(`/api/reveal${q}`, { method: "POST" });
 }
 
 // 解包并保存为...：浏览器原生下载对话框即「保存为」
