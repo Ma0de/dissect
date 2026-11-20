@@ -18,7 +18,7 @@ import {
 } from "./icons";
 
 type MenuKey = "file" | "edit" | "help" | null;
-type ToastType = "error" | "success";
+type ToastType = "error" | "success" | "info";
 interface Toast { id: number; type: ToastType; msg: string; }
 
 interface Ctx {
@@ -90,7 +90,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     const id = Date.now() + Math.random();
     setToasts((ts) => [...ts.slice(-3), { id, type, msg }]);
     setTimeout(() => setToasts((ts) => ts.filter((t) => t.id !== id)),
-      type === "error" ? 8000 : 4000);
+      type === "error" ? 8000 : type === "info" ? 3000 : 4000);
   }, []);
   const dismissToast = useCallback((id: number) => {
     setToasts((ts) => ts.filter((t) => t.id !== id));
@@ -214,10 +214,11 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const pickAndUnpack = useCallback(async (kind: "dir" | "zip") => {
     if (picking || busy) return;
     setPicking(true);
+    addToast("info", kind === "zip" ? "正在打开文件选择框，请选择游戏 zip / .rpa" : "正在打开文件夹选择框，请选择游戏目录");
     try {
       const { path, error } = await pickNative(kind);
       if (error) { addToast("error", error); return; }
-      if (!path) return;
+      if (!path) { addToast("info", "已取消选择"); return; }
       const { id } = await unpackPath(path);
       setStopping(false);
       setTask({ id, stage: "准备解包", pct: 0, done: false, ok: false });
@@ -529,7 +530,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             {toasts.map((t) => (
               <div key={t.id}
                 className="flex items-start gap-2.5 rounded-lg bg-primary_alt px-3.5 py-2.5 shadow-lg ring-1 ring-secondary_alt animate-toast-in">
-                <span className={`mt-1.5 size-2 shrink-0 rounded-full ${t.type === "success" ? "bg-fg-success-primary" : "bg-fg-error-primary"}`} />
+                <span className={`mt-1.5 size-2 shrink-0 rounded-full ${
+                  t.type === "success" ? "bg-fg-success-primary" : t.type === "info" ? "bg-brand-500" : "bg-fg-error-primary"
+                }`} />
                 <span className="flex-1 break-all text-sm font-medium text-secondary">{t.msg}</span>
                 <button className="cursor-pointer text-quaternary hover:text-secondary" onClick={() => dismissToast(t.id)}>
                   <IconX size={14} />

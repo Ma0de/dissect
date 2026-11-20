@@ -172,16 +172,50 @@ export interface WebExportResult {
   files: number;
 }
 
-// 把已生成的 Web 版导出为不依赖 dissect 的静态站点（目录或 zip）
-export async function exportStaticSite(dest: string, format: "folder" | "zip"): Promise<WebExportResult> {
+export interface WebExportProgress {
+  done: number;
+  total: number;
+}
+
+// 把已生成的 Web 版导出为不依赖 dissect 的静态站点（目录或 zip），边导出边回报进度
+export async function exportStaticSite(
+  dest: string,
+  format: "folder" | "zip",
+  onProgress?: (p: WebExportProgress) => void,
+): Promise<WebExportResult> {
   const r = await fetch("/api/web/export", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ dest, format }),
   });
-  const j = await r.json().catch(() => null);
-  if (!r.ok || !j || !j.path) throw new Error((j && j.error) || `导出失败 (${r.status})`);
-  return j as WebExportResult;
+  if (!r.ok) {
+    const j = await r.json().catch(() => null);
+    throw new Error((j && j.error) || `导出失败 (${r.status})`);
+  }
+  if (!r.body) throw new Error("导出失败：当前浏览器不支持流式响应");
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  let result: WebExportResult | null = null;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let idx: number;
+    while ((idx = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, idx).trim();
+      buf = buf.slice(idx + 1);
+      if (!line) continue;
+      const ev = JSON.parse(line);
+      if (ev.stage === "error") throw new Error(ev.error || "导出失败");
+      if (ev.stage === "progress" && onProgress) {
+        onProgress({ done: ev.done || 0, total: ev.total || 0 });
+      }
+      if (ev.stage === "done") result = ev as WebExportResult;
+    }
+  }
+  if (!result) throw new Error("导出失败：没有收到完成事件");
+  return result;
 }
 
 // 直接解包本地路径（文件 ▸ 打开 / 落地页按钮的主路径）

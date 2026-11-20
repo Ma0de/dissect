@@ -1,10 +1,10 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useModel } from "../components/Shell";
 import StartView from "../components/StartView";
 import TaskView from "../components/TaskView";
-import { Badge, Button, IconButton, Alert, Modal, useContextMenu } from "../components/ui";
+import { Badge, Button, IconButton, Alert, Modal, Spinner, ProgressBar, useContextMenu } from "../components/ui";
 import {
   IconChat, IconChoice, IconFlow, IconDB, IconDoc, IconReveal, IconCopy, IconAudio,
 } from "../components/icons";
@@ -25,10 +25,22 @@ export default function Home() {
   const [conflictImports, setConflictImports] = useState<string[] | null>(null);
   const [checkingWeb, setCheckingWeb] = useState(false);
   const [exportDlg, setExportDlg] = useState(false);
-  const [exporting, setExporting] = useState<"folder" | "zip" | null>(null);
+  const [exportPhase, setExportPhase] = useState<"idle" | "picking" | "exporting">("idle");
+  const [exportProgress, setExportProgress] = useState<{ done: number; total: number } | null>(null);
+  const [exportElapsed, setExportElapsed] = useState(0);
   const [exported, setExported] = useState<WebExportResult | null>(null);
+  const [revealing, setRevealing] = useState(false);
   const web = state?.web;
   const webBusy = !!task && !task.done && task.kind === "web";
+
+  useEffect(() => {
+    if (exportPhase === "idle") {
+      setExportElapsed(0);
+      return;
+    }
+    const t = setInterval(() => setExportElapsed((v) => v + 1), 1000);
+    return () => clearInterval(t);
+  }, [exportPhase]);
 
   if (uploadPct !== null || (task && (!task.done || !task.ok || !model))) {
     return <TaskView />;
@@ -59,22 +71,41 @@ export default function Home() {
   };
 
   const onExportStatic = async (format: "folder" | "zip") => {
-    if (exporting) return;
+    if (exportPhase !== "idle") return;
+    setExportPhase("picking");
+    addToast("info", "正在打开系统文件选择框，请选择导出位置");
     try {
       const { path, error } = await pickNative("export-dir");
       if (error) {
         addToast("error", error);
         return;
       }
-      if (!path) return;
-      setExporting(format);
-      const res = await exportStaticSite(path, format);
+      if (!path) {
+        addToast("info", "已取消导出");
+        return;
+      }
+      setExportPhase("exporting");
+      setExportProgress({ done: 0, total: web?.bytes || 0 });
+      const res = await exportStaticSite(path, format, (p) => setExportProgress(p));
       setExported(res);
       addToast("success", "静态站点已导出");
     } catch (e: any) {
       addToast("error", e?.message || String(e));
     } finally {
-      setExporting(null);
+      setExportPhase("idle");
+      setExportProgress(null);
+    }
+  };
+
+  const onReveal = async (path?: string) => {
+    if (revealing) return;
+    setRevealing(true);
+    try {
+      await revealInExplorer(path);
+    } catch (e: any) {
+      addToast("error", e?.message || String(e));
+    } finally {
+      setRevealing(false);
     }
   };
 
@@ -110,8 +141,8 @@ export default function Home() {
           </Button>
           {state?.dataDir && (
             <IconButton aria-label="在资源管理器中显示" title="在资源管理器中显示输出目录"
-              onClick={() => { revealInExplorer().catch(() => {}); }}>
-              <IconReveal />
+              disabled={revealing} onClick={() => onReveal()}>
+              {revealing ? <Spinner size={16} /> : <IconReveal />}
             </IconButton>
           )}
         </div>
@@ -152,7 +183,7 @@ export default function Home() {
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div className="max-w-[720px] text-sm leading-6 text-tertiary">
             把当前 Ren'Py 游戏转换成可以直接在浏览器里运行的 Web 版（WebAssembly），由本机托管，点开就能玩。
-            也可以导出成不依赖 dissect 的静态站点，上传到任意静态服务器对外提供。
+            生成后也可以导出成独立的静态文件（目录或 ZIP），不依赖 dissect。
             仅支持 Ren'Py 8.x；使用 Live2D 的游戏暂不支持。首次生成需要联网下载对应版本的 Ren'Py 运行时，之后复用缓存。
           </div>
           <div className="flex shrink-0 items-center gap-3">
@@ -261,7 +292,7 @@ export default function Home() {
                 state?.dataDir ? (
                   <button
                     className="max-w-full break-all text-right font-mono text-xs text-tertiary underline decoration-neutral-300 underline-offset-3 hover:text-secondary"
-                    onContextMenu={(e) => openCtx(e, [{ label: "复制路径", icon: <IconCopy />, onClick: () => navigator.clipboard?.writeText(state.dataDir || "") }])}
+                    onContextMenu={(e) => openCtx(e, [{ label: "复制路径", icon: <IconCopy />, onClick: () => { navigator.clipboard?.writeText(state.dataDir || "").catch(() => {}); addToast("success", "路径已复制"); } }])}
                     title="右键复制路径">
                     {model.sourceDir || "-"}
                   </button>
@@ -276,50 +307,82 @@ export default function Home() {
 
       {exportDlg && (
         <Modal
-          title={exported ? "静态站点已导出" : "导出静态站点"}
-          sub={exported ? undefined : "导出的站点不依赖 dissect，可直接部署到任意静态服务器"}
-          onClose={() => { if (exporting) return; setExportDlg(false); setExported(null); }}
-          actions={exported ? (
-            <>
-              <Button variant="secondary" onClick={() => {
-                navigator.clipboard?.writeText(exported.path).catch(() => {});
-                addToast("success", "路径已复制");
-              }}>复制路径</Button>
-              <Button variant="secondary" onClick={() => { revealInExplorer(exported.path).catch(() => {}); }}>
-                在资源管理器中显示
+          title={
+            exported ? "静态站点已导出"
+              : exportPhase === "picking" ? "选择导出位置"
+                : exportPhase === "exporting" ? "正在导出静态站点"
+                  : "导出静态站点"
+          }
+          sub={
+            exported ? undefined
+              : exportPhase === "picking" ? "已打开系统文件选择框，请在弹出的窗口里选择位置"
+                : exportPhase === "exporting" ? "正在写入文件，请保持本页面打开"
+                  : "导出的文件不依赖 dissect，也不需要后端"
+          }
+          onClose={() => { if (exportPhase !== "idle") return; setExportDlg(false); setExported(null); }}
+          actions={
+            exported ? (
+              <>
+                <Button variant="secondary" onClick={() => {
+                  navigator.clipboard?.writeText(exported.path).catch(() => {});
+                  addToast("success", "路径已复制");
+                }}>复制路径</Button>
+                <Button variant="secondary" disabled={revealing} onClick={() => onReveal(exported.path)}>
+                  {revealing ? (<><Spinner size={16} /> 打开中…</>) : "在资源管理器中显示"}
+                </Button>
+                <Button onClick={() => { setExportDlg(false); setExported(null); }}>完成</Button>
+              </>
+            ) : exportPhase !== "idle" ? (
+              <Button variant="secondary" disabled>
+                <Spinner size={16} /> {exportPhase === "picking" ? "等待选择位置…" : "导出中…"}
               </Button>
-              <Button onClick={() => { setExportDlg(false); setExported(null); }}>完成</Button>
-            </>
-          ) : (
-            <>
-              <Button variant="secondary" disabled={!!exporting} onClick={() => setExportDlg(false)}>取消</Button>
-              <Button variant="secondary" disabled={!!exporting} onClick={() => onExportStatic("folder")}>
-                {exporting === "folder" ? "导出中…" : "复制到文件夹"}
-              </Button>
-              <Button disabled={!!exporting} onClick={() => onExportStatic("zip")}>
-                {exporting === "zip" ? "打包中…" : "打包为 ZIP"}
-              </Button>
-            </>
-          )}
+            ) : (
+              <>
+                <Button variant="secondary" onClick={() => setExportDlg(false)}>取消</Button>
+                <Button variant="secondary" onClick={() => onExportStatic("folder")}>复制到文件夹</Button>
+                <Button onClick={() => onExportStatic("zip")}>打包为 ZIP</Button>
+              </>
+            )
+          }
         >
           {exported ? (
             <div className="mt-4 space-y-2 text-sm leading-6 text-tertiary">
               <p className="break-all font-mono text-xs text-primary">{exported.path}</p>
-              <p>共 {exported.files} 个文件，约 {humanSize(exported.bytes)}，目录里附带了一份 README.txt 部署说明。</p>
-              <p>
-                上传到任意静态 HTTP 服务器或静态托管平台即可；本机预览可在该目录执行{" "}
-                <code className="rounded bg-tertiary px-1">python -m http.server</code>。
-              </p>
+              <p>共 {exported.files} 个文件，约 {humanSize(exported.bytes)}。</p>
+            </div>
+          ) : exportPhase === "picking" ? (
+            <div className="mt-4 flex items-start gap-3 rounded-lg bg-secondary_alt p-3.5">
+              <Spinner className="mt-0.5" />
+              <div className="text-sm leading-6 text-tertiary">
+                <p className="font-medium text-secondary">系统文件选择框已打开，并且已置顶</p>
+                <p className="mt-1">在窗口里选好文件夹后点「选择文件夹 / 打开」，导出会自动开始；点「取消」则放弃。</p>
+                <p className="mt-1 text-xs text-quaternary">
+                  已等待 {exportElapsed} 秒 · 如果没看到窗口，按 Alt+Tab 或在任务栏里找一下
+                </p>
+              </div>
+            </div>
+          ) : exportPhase === "exporting" ? (
+            <div className="mt-4 space-y-2.5 rounded-lg bg-secondary_alt p-3.5">
+              <div className="flex items-center gap-2 text-sm font-medium text-secondary">
+                <Spinner size={16} />
+                正在写入文件…
+                <span className="ml-auto font-mono text-xs font-normal text-quaternary">{exportElapsed}s</span>
+              </div>
+              <ProgressBar pct={exportProgress && exportProgress.total > 0 ? exportProgress.done / exportProgress.total : 0} />
+              <div className="flex justify-between font-mono text-xs text-quaternary">
+                <span>{humanSize(exportProgress?.done || 0)}</span>
+                <span>{exportProgress && exportProgress.total > 0 ? humanSize(exportProgress.total) : "准备中…"}</span>
+              </div>
             </div>
           ) : (
             <div className="mt-4 space-y-2 text-sm leading-6 text-tertiary">
-              <p>导出的是完整静态站点：不依赖 dissect，也不需要任何后端，上传到静态服务器就能玩。</p>
+              <p>导出的是完整的 Web 版文件：包含运行所需的全部内容，不依赖 dissect，也不需要后端。</p>
               <ul className="list-disc space-y-1 pl-5">
-                <li>目录：复制一份到选定文件夹，方便本机起服务器预览；</li>
-                <li>ZIP：打包成单个压缩包，方便上传到托管平台；</li>
-                <li>两种方式都会附带 README.txt（.wasm 的 MIME、体积与存档说明等）。</li>
+                <li>目录：复制一份到选定文件夹；</li>
+                <li>ZIP：打包成单个压缩包；</li>
+                <li>两种方式内容一致。</li>
               </ul>
-              <p className="text-xs text-quaternary">站点约 {humanSize(web?.bytes || 0)}，导出需要一点时间。</p>
+              <p className="text-xs text-quaternary">约 {humanSize(web?.bytes || 0)}，导出需要一点时间。</p>
             </div>
           )}
         </Modal>

@@ -442,6 +442,24 @@ export function Loading({ text = "加载中…" }: { text?: string }) {
   );
 }
 
+export function Spinner({ size = 18, className = "" }: { size?: number; className?: string }) {
+  return (
+    <span className={`inline-flex shrink-0 text-brand-500 ${className}`}>
+      <IconSpin size={size} />
+    </span>
+  );
+}
+
+export function ProgressBar({ pct, className = "" }: { pct: number; className?: string }) {
+  const v = Math.max(0, Math.min(1, pct));
+  return (
+    <div className={`h-2 w-full overflow-hidden rounded-full bg-tertiary ${className}`}>
+      <div className="h-full rounded-full bg-brand-500 transition-[width] duration-150 ease-linear"
+        style={{ width: `${v * 100}%` }} />
+    </div>
+  );
+}
+
 export function Avatar({ name, color }: { name: string; color?: string }) {
   const h = [...name].reduce((a, c) => a + c.charCodeAt(0), 0);
   const palette = ["#7f56d9", "#2e90fa", "#12b76a", "#f79009", "#ee46bc", "#16b364", "#6172f3", "#dd2590"];
