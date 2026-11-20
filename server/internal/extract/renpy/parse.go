@@ -787,66 +787,115 @@ func stripTags(s string) string {
 }
 
 // unquote 解析 python 字符串字面量（含转义）。
+// 只取表达式开头的那个字符串字面量：`_("标题") + (" Demo" if b else "")` 这类拼接/条件表达式
+// 以前会被首尾引号直接截断，把整段代码当成标题。
 func unquote(s string) string {
 	s = strings.TrimSpace(s)
-	// _(...)/u 前缀
-	s = strings.TrimPrefix(s, "_(")
-	s = strings.TrimSuffix(s, ")")
-	for len(s) > 1 && (s[0] == 'u' || s[0] == 'r' || s[0] == 'b' || s[0] == 'f') &&
-		(s[1] == '"' || s[1] == '\'') {
-		s = s[1:]
-	}
-	if len(s) < 2 {
+	if s == "" {
 		return s
 	}
-	q := s[0]
-	if (q != '"' && q != '\'') || s[len(s)-1] != q {
-		return s
+	if inner, ok := unwrapTranslated(s); ok {
+		s = inner
+		if s == "" {
+			return s
+		}
 	}
-	body := s[1 : len(s)-1]
-	var sb strings.Builder
-	for i := 0; i < len(body); i++ {
-		c := body[i]
-		if c == '\\' && i+1 < len(body) {
-			i++
-			switch body[i] {
-			case 'n':
-				sb.WriteByte('\n')
-			case 't':
-				sb.WriteByte('\t')
-			case 'r':
-				sb.WriteByte('\r')
-			case '"', '\'', '\\', '{', '[', '%':
-				sb.WriteByte(body[i])
-			case 'x':
-				if i+2 < len(body) {
-					if v, err := strconv.ParseUint(body[i+1:i+3], 16, 8); err == nil {
-						sb.WriteByte(byte(v))
-						i += 2
-					}
-				}
-			case 'u':
-				if i+4 < len(body) {
-					if v, err := strconv.ParseUint(body[i+1:i+5], 16, 32); err == nil {
-						sb.WriteRune(rune(v))
-						i += 4
-					}
-				}
-			case 'U':
-				if i+8 < len(body) {
-					if v, err := strconv.ParseUint(body[i+1:i+9], 16, 32); err == nil {
-						sb.WriteRune(rune(v))
-						i += 8
-					}
-				}
-			default:
-				sb.WriteByte(body[i])
+	if v, _, ok := leadingString(s); ok {
+		return v
+	}
+	return s
+}
+
+// unwrapTranslated 去掉 _( ... ) 包装，只按括号配对切，不会误伤后面的拼接表达式。
+func unwrapTranslated(s string) (string, bool) {
+	if !strings.HasPrefix(s, "_(") {
+		return "", false
+	}
+	depth := 0
+	var quote byte
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if quote != 0 {
+			if c == '\\' {
+				i++
+				continue
+			}
+			if c == quote {
+				quote = 0
 			}
 			continue
 		}
-		sb.WriteByte(c)
+		switch c {
+		case '"', '\'':
+			quote = c
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 {
+				return strings.TrimSpace(s[2:i]), true
+			}
+		}
 	}
-	return sb.String()
+	return "", false
+}
+
+func leadingString(s string) (string, string, bool) {
+	i := 0
+	for i+1 < len(s) && (s[i] == 'u' || s[i] == 'r' || s[i] == 'b' || s[i] == 'f') &&
+		(s[i+1] == '"' || s[i+1] == '\'') {
+		i++
+	}
+	if i >= len(s) || (s[i] != '"' && s[i] != '\'') {
+		return "", s, false
+	}
+	q := s[i]
+	var sb strings.Builder
+	for j := i + 1; j < len(s); j++ {
+		c := s[j]
+		if c == q {
+			return sb.String(), s[j+1:], true
+		}
+		if c != '\\' || j+1 >= len(s) {
+			sb.WriteByte(c)
+			continue
+		}
+		j++
+		switch s[j] {
+		case 'n':
+			sb.WriteByte('\n')
+		case 't':
+			sb.WriteByte('\t')
+		case 'r':
+			sb.WriteByte('\r')
+		case '"', '\'', '\\', '{', '[', '%':
+			sb.WriteByte(s[j])
+		case 'x':
+			if j+2 < len(s) {
+				if v, err := strconv.ParseUint(s[j+1:j+3], 16, 8); err == nil {
+					sb.WriteByte(byte(v))
+					j += 2
+				}
+			}
+		case 'u':
+			if j+4 < len(s) {
+				if v, err := strconv.ParseUint(s[j+1:j+5], 16, 32); err == nil {
+					sb.WriteRune(rune(v))
+					j += 4
+				}
+			}
+		case 'U':
+			if j+8 < len(s) {
+				if v, err := strconv.ParseUint(s[j+1:j+9], 16, 32); err == nil {
+					sb.WriteRune(rune(v))
+					j += 8
+				}
+			}
+		default:
+			sb.WriteByte(s[j])
+		}
+	}
+	return "", s, false
 }
 
 func extractFilePath(expr string) string {
