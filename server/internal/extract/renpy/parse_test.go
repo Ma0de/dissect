@@ -37,3 +37,32 @@ func TestParseLFDialogue(t *testing.T) {
 		t.Fatalf("dialogues = %d, want 1", len(p.Model.Dialogues))
 	}
 }
+
+func TestUnquoteExpressions(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{`_("永恒与星辰与日常") + (" Demo" if _obe_demo_build else "")`, "永恒与星辰与日常"},
+		{`"Hello"`, "Hello"},
+		{`'single'`, "single"},
+		{`u"中文\n"`, "中文\n"},
+		{`"A\u4e2dB"`, "A中B"},
+		{`_("translated")`, "translated"},
+		{`some_call("x")`, `some_call("x")`},
+		{`"a" + "b"`, "a"},
+		{`_("x") + y`, "x"},
+		{`_("name: %s" % who)`, "name: %s"},
+	}
+	for _, c := range cases {
+		if got := unquote(c.in); got != c.want {
+			t.Fatalf("unquote(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestParseConfigNameExpression(t *testing.T) {
+	src := "define config.name = _(\"永恒与星辰与日常\") + (\" Demo\" if _obe_demo_build else \"\")\n"
+	p := NewParser()
+	p.ParseFiles(map[string]string{"options.rpy": src})
+	if p.Model.GameName != "永恒与星辰与日常" {
+		t.Fatalf("game name = %q", p.Model.GameName)
+	}
+}
